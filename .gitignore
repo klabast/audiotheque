@@ -20,3 +20,7 @@ CLAUDE.md
 
 # Local Go build of the test MPD helper
 tools/test-mpd/test-mpd
+
+# Design workbench — local-only static HTML preview tool.
+# Carries its own vite + rollup dev-dependency CVE surface and isn't shipped.
+design/
