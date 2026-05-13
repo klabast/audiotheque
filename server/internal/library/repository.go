@@ -1237,3 +1237,21 @@ WHERE status = 'running' AND updated_at < ?`
 	}
 	return result.RowsAffected()
 }
+
+// ResetAllRunningJobs resets every row with status='running' to 'pending',
+// regardless of heartbeat freshness. This is the boot-time reset: a fresh
+// worker process implies no scan is actually running, so all 'running' rows
+// are by definition stale (the previous worker is dead).
+func (r *repository) ResetAllRunningJobs() (int64, error) {
+	//language=SQL
+	query := `
+UPDATE scan_queue
+SET status = 'pending', started_at = NULL, updated_at = CURRENT_TIMESTAMP
+WHERE status = 'running'`
+
+	result, err := r.db.Exec(query)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
