@@ -42,10 +42,48 @@ const runningProgress = (libraryId: number, processed = 5, total = 100) => ({
 	startedAt: new Date().toISOString()
 });
 
+describe('scan store — lazy WebSocket subscription', () => {
+	// Regression guard: the scan store used to subscribe to scan-progress and
+	// library-updated at module load. That opened the WebSocket BEFORE
+	// PlayFooter.onMount had a chance to register its `client-id` listener,
+	// so the WS welcome was consumed by the early listeners and the playback
+	// store never learned its own client ID — every e2e playback scenario
+	// timed out at waitForClientId. Subscriptions now go in lazily via
+	// scan.start(), which AppLayout.onMount calls after children mount.
+	it('does not call api.subscribe* at module load', async () => {
+		setupApiMock();
+		await import('./scan.svelte');
+		const { api } = await import('$lib/services/api');
+		expect(api.subscribeToAllScanProgress).not.toHaveBeenCalled();
+		expect(api.subscribeToLibraryUpdated).not.toHaveBeenCalled();
+	});
+
+	it('subscribes once start() is called', async () => {
+		setupApiMock();
+		const { scan } = await import('./scan.svelte');
+		const { api } = await import('$lib/services/api');
+		scan.start();
+		expect(api.subscribeToAllScanProgress).toHaveBeenCalledTimes(1);
+		expect(api.subscribeToLibraryUpdated).toHaveBeenCalledTimes(1);
+	});
+
+	it('subsequent start() calls are no-ops (idempotent)', async () => {
+		setupApiMock();
+		const { scan } = await import('./scan.svelte');
+		const { api } = await import('$lib/services/api');
+		scan.start();
+		scan.start();
+		scan.start();
+		expect(api.subscribeToAllScanProgress).toHaveBeenCalledTimes(1);
+		expect(api.subscribeToLibraryUpdated).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('scan store — receives scan-progress WS messages', () => {
 	it('starts empty with no scans running', async () => {
 		setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 		expect(scan.isAnyScanRunning).toBe(false);
 		expect(scan.getProgress(1)).toBeUndefined();
 	});
@@ -53,6 +91,7 @@ describe('scan store — receives scan-progress WS messages', () => {
 	it('stores progress for a library when a scan-progress message arrives', async () => {
 		const { scanProgressListeners } = setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 
 		scanProgressListeners.forEach((cb) => cb(runningProgress(1, 5, 100)));
 
@@ -63,6 +102,7 @@ describe('scan store — receives scan-progress WS messages', () => {
 	it('flips isAnyScanRunning to true while a scan is running', async () => {
 		const { scanProgressListeners } = setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 
 		expect(scan.isAnyScanRunning).toBe(false);
 		scanProgressListeners.forEach((cb) => cb(runningProgress(1)));
@@ -72,6 +112,7 @@ describe('scan store — receives scan-progress WS messages', () => {
 	it('clears state when a scan completes', async () => {
 		const { scanProgressListeners } = setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 
 		scanProgressListeners.forEach((cb) => cb(runningProgress(1, 10, 10)));
 		expect(scan.isAnyScanRunning).toBe(true);
@@ -86,6 +127,7 @@ describe('scan store — receives scan-progress WS messages', () => {
 	it('tracks scans on multiple libraries independently', async () => {
 		const { scanProgressListeners } = setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 
 		scanProgressListeners.forEach((cb) => cb(runningProgress(1, 1, 10)));
 		scanProgressListeners.forEach((cb) => cb(runningProgress(2, 50, 50)));
@@ -104,6 +146,7 @@ describe('scan store — notifies subscribers of library-updated events', () => 
 	it('invokes onLibraryUpdated callbacks when a library-updated WS message arrives', async () => {
 		const { libraryUpdatedListeners } = setupApiMock();
 		const { scan } = await import('./scan.svelte');
+		scan.start();
 
 		const calls: number[] = [];
 		const unsub = scan.onLibraryUpdated((libraryId) => calls.push(libraryId));
