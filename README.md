@@ -30,7 +30,7 @@ _Coming soon — drop PNGs into [`docs/screenshots/`](docs/screenshots/) and the
 docker compose up -d
 ```
 
-The app comes up on `http://localhost:8880`. First-time visit opens a setup
+The app comes up on `http://localhost:8080`. First-time visit opens a setup
 wizard to create your admin account.
 
 See [Install](#install) below for the full configuration surface.
@@ -103,11 +103,19 @@ of them optional.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `AUDIOTHEQUE_PORT` | HTTP port | `8880` |
-| `AUDIOD_DATA_DIR` | DB, cache, reset codes | `./data` |
-| `AUDIOD_ALLOWED_ORIGINS` | CORS allowlist (comma-separated) | `*` |
-| `MPD_HOSTS` | Comma-separated `host:port` list | (mDNS only) |
-| `ENABLE_MDNS_DISCOVERY` | Auto-discover MPD on LAN | `true` |
+| `AUDIOD_PORT` | HTTP port | `8080` |
+| `AUDIOD_DATA_DIR` | DB, cache, reset codes, transcode cache | `./data` |
+| `AUDIOD_WEB_DIR` | Override the embedded SvelteKit static bundle (mostly for development) | embedded |
+| `AUDIOD_ALLOWED_ORIGINS` | CORS / WebSocket origin allowlist (comma-separated) | same-origin only |
+| `JWT_SECRET` | Signing secret for auth cookies + stream URLs | auto-generated at startup |
+
+Env var names use the `audiod` internal-daemon prefix (like `mpd`,
+`pulseaudio`) — decoupled from the user-facing brand so renames don't
+break existing installs.
+
+MPD hosts and mDNS discovery are configured **in the UI** (Settings →
+Devices), not via environment variables — they live in the database
+alongside other user settings.
 
 First-time setup: open the URL, create an admin account, point it at your
 music library in Settings, trigger a scan.
