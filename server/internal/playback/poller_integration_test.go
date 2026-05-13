@@ -149,3 +149,73 @@ func TestIntegration_Poller_RealTrackEndAdvancesOnce(t *testing.T) {
 			sess.Current.TrackID)
 	}
 }
+
+// Integration test for the user-visible contract: "server polls MPD's play
+// state periodically and pushes it via WS to each connected client". Wires
+// the production resolver + the real mpd/testserver (which speaks MPD's true
+// decimal-elapsed wire format) so a parse bug in the gompd client surfaces
+// as a wrong broadcast value here.
+//
+// REGRESSION: before the gompd ParseFloat fix, strconv.Atoi("45.000") silently
+// returned 0 and the broadcast always carried position=0, which is why the UI
+// showed playback frozen at 0:00 even while MPD audio kept advancing.
+func TestIntegration_Poller_BroadcastsMPDPositionToWSClients(t *testing.T) {
+	srv := testserver.New()
+	defer srv.Close()
+
+	registry := NewInMemoryDeviceRegistry()
+	if err := registry.Register(Device{
+		ID:      "audio-wz",
+		Name:    "Wohnzimmer",
+		Type:    DeviceTypeMPD,
+		Address: srv.Addr(),
+		UserID:  1,
+	}); err != nil {
+		t.Fatalf("registry.Register: %v", err)
+	}
+	resolver := NewRegistryDeviceResolver(registry, slog.Default())
+
+	tracks := &mockTrackProvider{
+		tracks: []Track{{ID: 1, AlbumID: 100, Duration: 180}},
+	}
+	repo := &mockSessionRepository{}
+	bc := &recordingBroadcaster{}
+
+	svc := NewService(tracks, repo)
+	svc.SetBroadcaster(bc)
+	svc.SetDeviceResolver(resolver)
+	svc.SetStreamURLBuilder(func(id, _ int64) string {
+		return "http://audiod.local/stream"
+	})
+
+	if _, err := svc.PlayAlbumOnDevice(1, 100, 0, "audio-wz"); err != nil {
+		t.Fatalf("PlayAlbumOnDevice: %v", err)
+	}
+
+	// Simulate MPD progressing 45 seconds into the track. The poller must
+	// observe state=play, lift Elapsed off the wire, and broadcast that
+	// position to every WS client of the user.
+	srv.SetState("play")
+	srv.SetElapsed(45)
+
+	preCount := len(bc.calls)
+	svc.PollMPDPositions()
+
+	if len(bc.calls) == preCount {
+		t.Fatal("expected poll to produce a broadcast, got none")
+	}
+	last := bc.calls[len(bc.calls)-1]
+	if last.session == nil || last.session.Current == nil {
+		t.Fatalf("expected broadcast session with current track, got %+v", last)
+	}
+	if last.session.Current.Position != 45 {
+		t.Errorf("broadcast carried position=%d, want 45 (MPD reports decimal "+
+			"elapsed; if this is 0 the gompd parser is silently dropping the "+
+			"fractional component)", last.session.Current.Position)
+	}
+	// Sanity: broadcast goes to all of the user's clients, not "everyone except
+	// somebody" — server-side poller updates have no originating client.
+	if last.exceptCID != "" {
+		t.Errorf("poller broadcast should reach every client (exceptCID=%q)", last.exceptCID)
+	}
+}

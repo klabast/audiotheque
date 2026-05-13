@@ -192,7 +192,12 @@ func (s *Server) cmdStatus() string {
 	b.WriteString(fmt.Sprintf("volume: %d\n", s.volume))
 	b.WriteString(fmt.Sprintf("state: %s\n", s.state))
 	if s.state != "stop" && len(s.playlist) > 0 {
-		b.WriteString(fmt.Sprintf("elapsed: %d\n", s.elapsed))
+		// Real MPD always emits elapsed in decimal form with sub-second
+		// precision (e.g. "elapsed: 12.345"). Emit `<int>.000` so the wire
+		// format matches and any client that can't parse a decimal here
+		// breaks loudly. Tests inspecting internal state via State() still
+		// see the integer-seconds value.
+		b.WriteString(fmt.Sprintf("elapsed: %d.000\n", s.elapsed))
 		b.WriteString("song: 0\n")
 		b.WriteString(fmt.Sprintf("songid: %d\n", s.songIDs[0]))
 	}

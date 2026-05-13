@@ -40,7 +40,12 @@ func (c *GompdClient) Status() (Status, error) {
 	}
 
 	volume, _ := strconv.Atoi(attrs["volume"])
-	elapsed, _ := strconv.Atoi(attrs["elapsed"])
+	// MPD reports elapsed with sub-second precision (e.g. "12.345"). Parse as
+	// float and truncate to int seconds — the rest of the codebase carries
+	// position as int seconds and truncation keeps the broadcast value pinned
+	// to "the second the user just heard", never rounding forward past it.
+	elapsedFloat, _ := strconv.ParseFloat(attrs["elapsed"], 64)
+	elapsed := int(elapsedFloat)
 
 	return Status{
 		State:   attrs["state"],

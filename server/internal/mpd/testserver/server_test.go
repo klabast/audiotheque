@@ -226,8 +226,12 @@ func TestServer_Seek(t *testing.T) {
 
 	lines = sendCommand(t, conn, scanner, "status")
 	status := parseResponse(lines)
-	if status["elapsed"] != "45" {
-		t.Errorf("Expected elapsed '45', got '%s'", status["elapsed"])
+	// Real MPD emits elapsed with sub-second precision; the fake mirrors that
+	// by suffixing ".000" so any client that can't parse a decimal here breaks
+	// loudly (the bug this fidelity catches: gompd parsing with strconv.Atoi
+	// silently returning 0 for "45.000").
+	if status["elapsed"] != "45.000" {
+		t.Errorf("Expected elapsed '45.000', got '%s'", status["elapsed"])
 	}
 }
 
