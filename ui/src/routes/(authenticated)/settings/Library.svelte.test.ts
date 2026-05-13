@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
 import Library from './Library.svelte';
-import type { ScanProgressData } from '$lib/services/ws-client';
+import type { ScanProgressData, LibraryUpdatedData } from '$lib/services/ws-client';
+import { scan } from '$lib/stores/scan.svelte';
+
+// The scan store imports the api module at top level and subscribes once for
+// the lifetime of the test process. We capture the callbacks it registers so
+// individual tests can drive progress through the real store.
+const wsCallbacks = vi.hoisted(() => ({
+	allScanProgress: null as ((p: ScanProgressData) => void) | null,
+	libraryUpdated: null as ((d: LibraryUpdatedData) => void) | null
+}));
 
 // Mock the API service
 vi.mock('$lib/services/api', () => ({
@@ -10,7 +19,21 @@ vi.mock('$lib/services/api', () => ({
 		listLibraries: vi.fn(),
 		createLibrary: vi.fn(),
 		startScan: vi.fn(),
-		subscribeToScanProgress: vi.fn()
+		// Retained for backward compatibility with any caller; the component
+		// itself no longer uses it (scan progress lives in the global store).
+		subscribeToScanProgress: vi.fn(() => () => {}),
+		subscribeToAllScanProgress: vi.fn((cb: (p: ScanProgressData) => void) => {
+			wsCallbacks.allScanProgress = cb;
+			return () => {
+				wsCallbacks.allScanProgress = null;
+			};
+		}),
+		subscribeToLibraryUpdated: vi.fn((cb: (d: LibraryUpdatedData) => void) => {
+			wsCallbacks.libraryUpdated = cb;
+			return () => {
+				wsCallbacks.libraryUpdated = null;
+			};
+		})
 	}
 }));
 
@@ -32,6 +55,8 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 describe('Library Settings Component', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// The global scan store is a singleton; clear its state between tests.
+		(scan.activeScans as unknown as Map<number, ScanProgressData>).clear();
 	});
 
 	it('should render library settings title', () => {
@@ -289,7 +314,6 @@ describe('Library Scan Progress', () => {
 
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockReturnValue(() => {});
 
 		render(Library);
 
@@ -313,14 +337,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -330,7 +348,7 @@ describe('Library Scan Progress', () => {
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
 		// Simulate progress update
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -357,14 +375,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -373,7 +385,7 @@ describe('Library Scan Progress', () => {
 		// Act - Start scan and send progress
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -401,14 +413,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -417,7 +423,7 @@ describe('Library Scan Progress', () => {
 		// Act - Start scan and send progress
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -446,14 +452,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -462,7 +462,7 @@ describe('Library Scan Progress', () => {
 		// Act - Start scan and send progress
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -490,14 +490,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -506,7 +500,7 @@ describe('Library Scan Progress', () => {
 		// Act - Start scan and send progress
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -536,14 +530,8 @@ describe('Library Scan Progress', () => {
 			albumCount: 0
 		};
 
-		let progressCallback: ((progress: ScanProgressData) => void) | null = null;
-
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockResolvedValue(undefined);
-		vi.mocked(api.subscribeToScanProgress).mockImplementation((libraryId, callback) => {
-			progressCallback = callback;
-			return () => {};
-		});
 
 		render(Library);
 
@@ -553,7 +541,7 @@ describe('Library Scan Progress', () => {
 		await fireEvent.click(screen.getByTestId('scan-library-button-1'));
 
 		// Send running progress
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'running',
 			totalFiles: 100,
@@ -568,7 +556,7 @@ describe('Library Scan Progress', () => {
 		await screen.findByTestId('scan-progress-bar-1');
 
 		// Send completion
-		progressCallback!({
+		wsCallbacks.allScanProgress!({
 			libraryId: 1,
 			status: 'completed',
 			totalFiles: 100,
@@ -599,7 +587,6 @@ describe('Library Scan Progress', () => {
 
 		vi.mocked(api.listLibraries).mockResolvedValue([mockLibrary]);
 		vi.mocked(api.startScan).mockRejectedValue(new Error('Scan already in progress'));
-		vi.mocked(api.subscribeToScanProgress).mockReturnValue(() => {});
 
 		render(Library);
 

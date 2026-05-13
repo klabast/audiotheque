@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { api, type LibraryLibraryResponse, type LibraryAlbumResponse } from '$lib/services/api';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { scan } from '$lib/stores/scan.svelte';
 	import { APP_NAME } from '$lib/branding';
 	import * as m from '$lib/paraglide/messages';
 	import { Button, AudAlbumCard } from '$lib/components/ui';
@@ -209,6 +210,33 @@
 		} finally {
 			loading = false;
 		}
+	});
+
+	// While a scan is running, refetch the visible library's albums whenever
+	// the server signals a change. Throttled so we don't refetch on every
+	// single track add.
+	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	const REFRESH_DEBOUNCE_MS = 750;
+
+	const offLibraryUpdated = scan.onLibraryUpdated((libraryId) => {
+		if (libraries.length === 0 || libraries[0].id !== libraryId) return;
+		if (refreshTimer !== null) clearTimeout(refreshTimer);
+		refreshTimer = setTimeout(async () => {
+			refreshTimer = null;
+			try {
+				albums = await api.listAlbums(libraryId, {
+					hiRes: hiResOnly || undefined,
+					sort: serializeSort(sortLevels)
+				});
+			} catch (e) {
+				console.error('Live refresh failed:', e);
+			}
+		}, REFRESH_DEBOUNCE_MS);
+	});
+
+	onDestroy(() => {
+		offLibraryUpdated();
+		if (refreshTimer !== null) clearTimeout(refreshTimer);
 	});
 </script>
 
