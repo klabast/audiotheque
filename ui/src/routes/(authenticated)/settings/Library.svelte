@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { api } from '$lib/services/api';
+	import { scan } from '$lib/stores/scan.svelte';
 	import {
 		Alert,
 		Button,
@@ -12,7 +13,6 @@
 		Label
 	} from '$lib/components/ui';
 	import { Pencil, RefreshCw, RotateCcw, Trash2 } from 'lucide-svelte';
-	import type { ScanProgressData } from '$lib/services/ws-client';
 	import type { LibraryLibraryResponse } from '$lib/api/generated/src';
 	import * as m from '$lib/paraglide/messages';
 
@@ -33,11 +33,23 @@
 	let libraryName = $state('');
 	let libraryPaths: string[] = $state(['']);
 
-	// Scan progress state - map of libraryId -> progress
-	let scanProgress = new SvelteMap<number, ScanProgressData>();
+	// Scan progress lives in the global scan store (so it survives nav). The
+	// store exposes a reactive SvelteMap; we just read from it.
+	const scanProgress = scan.activeScans;
 
 	// Scan error state - map of libraryId -> error message
 	let scanErrors = new SvelteMap<number, string>();
+
+	// Refresh the library list when the backend signals that a library's
+	// contents changed (track added, scan completed).
+	const offLibraryUpdated = scan.onLibraryUpdated(async () => {
+		try {
+			libraries = (await api.listLibraries()) as LibraryWithStats[];
+		} catch (err) {
+			console.error('Failed to refresh libraries after update:', err);
+		}
+	});
+	onDestroy(() => offLibraryUpdated());
 
 	// Delete modal state
 	let deleteModalOpen = $state(false);
@@ -103,22 +115,11 @@
 		}
 
 		try {
-			const newLibrary = await api.createLibrary(trimmedName, filteredPaths);
+			await api.createLibrary(trimmedName, filteredPaths);
 
-			// Subscribe to scan progress for the new library (it auto-scans after creation)
-			if (newLibrary.id !== undefined) {
-				const libraryId = newLibrary.id;
-				api.subscribeToScanProgress(libraryId, async (progress) => {
-					scanProgress.set(libraryId, progress);
-
-					// Reload libraries when scan completes to get updated stats
-					if (progress.status === 'completed') {
-						libraries = (await api.listLibraries()) as LibraryWithStats[];
-						// Clear the success message after a delay
-						setTimeout(() => scanProgress.delete(libraryId), 5000);
-					}
-				});
-			}
+			// The new library auto-scans on creation; progress flows through
+			// the global scan store via the app-wide WebSocket subscription,
+			// and library-updated events trigger refreshes via onLibraryUpdated.
 
 			// Close form before the list refresh so the user isn't stuck on it
 			showForm = false;
@@ -139,20 +140,8 @@
 			// Clear any previous errors
 			scanErrors.delete(libraryId);
 
-			// Subscribe to progress updates
-			const _unsubscribe = api.subscribeToScanProgress(libraryId, async (progress) => {
-				// Update progress state reactively
-				scanProgress.set(libraryId, progress);
-
-				// Reload libraries when scan completes to get updated stats
-				if (progress.status === 'completed') {
-					libraries = (await api.listLibraries()) as LibraryWithStats[];
-					// Clear the success message after a delay
-					setTimeout(() => scanProgress.delete(libraryId), 5000);
-				}
-			});
-
-			// Start the scan
+			// Progress and completion are picked up by the global scan store,
+			// not by a per-call subscription — no local subscribe needed.
 			await api.startScan(libraryId);
 		} catch (error) {
 			console.error('Failed to start scan:', error);

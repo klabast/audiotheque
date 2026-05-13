@@ -1,8 +1,9 @@
 <script lang="ts">
 	import UserMenu from './UserMenu.svelte';
-	import { Menu, Home, ListMusic } from 'lucide-svelte';
+	import { Menu, Home, ListMusic, Loader2 } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { AudSearchBox } from '$lib/components/ui';
+	import { scan } from '$lib/stores/scan.svelte';
 
 	interface Props {
 		toggleLeftDrawer: () => void;
@@ -35,6 +36,17 @@
 	</div>
 
 	<div class="flex items-center gap-2">
+		{#if scan.isAnyScanRunning}
+			<span
+				class="bg-surface-hover text-text-secondary hidden items-center gap-2 rounded-full px-3 py-1 text-xs sm:inline-flex"
+				role="status"
+				aria-label={m['library.scan.in_progress_aria']()}
+				data-testid="topbar-scanning-indicator"
+			>
+				<Loader2 class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+				{m['library.scan.in_progress']()}
+			</span>
+		{/if}
 		<button
 			onclick={toggleRightSidebar}
 			class="text-text-primary hover:bg-surface-hover flex min-h-11 min-w-11 items-center justify-center rounded transition-colors"

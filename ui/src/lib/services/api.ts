@@ -1,11 +1,17 @@
 import { albumsApi, apiConfig, authApi, librariesApi, systemApi } from '$lib/api/client';
 import type { PlaybackSessionResponse } from '$lib/api/client';
 import { throwIfNotOk } from './api-error';
-import { createWebSocketClient, type WebSocketClient, type ScanProgressData } from './ws-client';
+import {
+	createWebSocketClient,
+	type WebSocketClient,
+	type ScanProgressData,
+	type LibraryUpdatedData
+} from './ws-client';
 
 export * from '$lib/api/client';
 
 export type ScanProgressCallback = (progress: ScanProgressData) => void;
+export type LibraryUpdatedCallback = (data: LibraryUpdatedData) => void;
 export type PlaybackSessionCallback = (session: PlaybackSessionResponse) => void;
 
 // Device types (not yet in generated client)
@@ -232,6 +238,33 @@ class ApiService {
 		});
 
 		return unsubscribe;
+	}
+
+	/**
+	 * Subscribe to scan-progress events for every library. Used by the
+	 * global scan store so progress survives navigation away from settings.
+	 */
+	subscribeToAllScanProgress(callback: ScanProgressCallback): () => void {
+		if (!this.wsClient) {
+			this.connectWebSocket();
+		}
+		return this.wsClient!.on('scan-progress', (data) => {
+			callback(data as ScanProgressData);
+		});
+	}
+
+	/**
+	 * Subscribe to library-updated events. The server emits one of these
+	 * whenever the catalogue for a library has changed (track inserted,
+	 * scan completed) and the client should refetch.
+	 */
+	subscribeToLibraryUpdated(callback: LibraryUpdatedCallback): () => void {
+		if (!this.wsClient) {
+			this.connectWebSocket();
+		}
+		return this.wsClient!.on('library-updated', (data) => {
+			callback(data as LibraryUpdatedData);
+		});
 	}
 
 	/**

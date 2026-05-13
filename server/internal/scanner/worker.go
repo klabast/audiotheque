@@ -20,11 +20,21 @@ const (
 	MaintenanceInterval = 30 * time.Second
 	// ShutdownTimeout is how long to wait for current job to finish during shutdown
 	ShutdownTimeout = 30 * time.Second
+	// LibraryUpdatedThrottle bounds how often a per-library 'library-updated'
+	// event is emitted during a busy scan. The UI debounces its own refetch on
+	// top of this, but throttling at the source keeps the WS quiet.
+	LibraryUpdatedThrottle = 2 * time.Second
 )
+
+// Broadcaster is the subset of *websocket.Hub the scanner actually needs.
+// Defined as an interface so tests can substitute a recording mock.
+type Broadcaster interface {
+	Broadcast(msg websocket.Message) error
+}
 
 // Worker is a background worker that processes scan jobs from the queue
 type Worker struct {
-	hub                 *websocket.Hub
+	broadcaster         Broadcaster
 	repo                library.Repository
 	dataDir             string
 	interval            time.Duration
@@ -34,18 +44,25 @@ type Worker struct {
 
 	// Progress throttling (per-library)
 	lastBroadcast map[int64]time.Time
+
+	// library-updated throttling (per-library)
+	libraryUpdatedThrottle      time.Duration
+	lastLibraryUpdatedBroadcast map[int64]time.Time
 }
 
-// NewWorker creates a new scanner worker
-func NewWorker(repo library.Repository, hub *websocket.Hub) *Worker {
+// NewWorker creates a new scanner worker.
+// Pass *websocket.Hub for production; any Broadcaster works (tests substitute a mock).
+func NewWorker(repo library.Repository, broadcaster Broadcaster) *Worker {
 	return &Worker{
-		hub:                 hub,
-		repo:                repo,
-		dataDir:             config.GetDataDir(),
-		interval:            2 * time.Second,
-		maintenanceInterval: MaintenanceInterval,
-		stop:                make(chan struct{}),
-		lastBroadcast:       make(map[int64]time.Time),
+		broadcaster:                 broadcaster,
+		repo:                        repo,
+		dataDir:                     config.GetDataDir(),
+		interval:                    2 * time.Second,
+		maintenanceInterval:         MaintenanceInterval,
+		stop:                        make(chan struct{}),
+		lastBroadcast:               make(map[int64]time.Time),
+		libraryUpdatedThrottle:      LibraryUpdatedThrottle,
+		lastLibraryUpdatedBroadcast: make(map[int64]time.Time),
 	}
 }
 
@@ -230,6 +247,9 @@ func (w *Worker) processJob(job *library.ScanJob) {
 	// Phase 4: Complete - broadcast final progress then delete job
 	job.CurrentFile = ""
 	w.broadcastProgress(job, "completed")
+	// Always emit a final library-updated so the UI catches anything the
+	// throttled per-track emissions skipped.
+	w.broadcastLibraryUpdated(job.LibraryID)
 
 	log.Printf("Scan completed for library %d: %d files, %d added, %d updated, %d errors",
 		job.LibraryID, job.ProcessedFiles, job.TracksAdded, job.TracksUpdated, job.Errors)
@@ -353,6 +373,7 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 
 	existing, _ := w.repo.GetTrackByPath(libraryID, path)
 	savedTrack, err := w.repo.CreateOrUpdateTrack(track)
+	trackChanged := err == nil
 	if err != nil {
 		log.Printf("Error saving track: %v", err)
 		job.Errors++
@@ -373,6 +394,11 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 
 	job.ProcessedFiles++
 	w.throttledUpdateAndBroadcast(job)
+	if trackChanged {
+		// Signal "you should refetch albums for this library" — throttled so
+		// big scans don't flood the WS. The UI also debounces on its side.
+		w.maybeBroadcastLibraryUpdated(libraryID)
+	}
 }
 
 // countAudioFiles counts total audio files in paths
@@ -413,7 +439,7 @@ func (w *Worker) throttledUpdateAndBroadcast(job *library.ScanJob) {
 
 // broadcastProgress sends scan progress to WebSocket clients
 func (w *Worker) broadcastProgress(job *library.ScanJob, status string) {
-	if w.hub == nil {
+	if w.broadcaster == nil {
 		return
 	}
 
@@ -439,7 +465,36 @@ func (w *Worker) broadcastProgress(job *library.ScanJob, status string) {
 		Data: progress,
 	}
 
-	if err := w.hub.Broadcast(msg); err != nil {
+	if err := w.broadcaster.Broadcast(msg); err != nil {
 		log.Printf("Failed to broadcast scan progress: %v", err)
 	}
+}
+
+// broadcastLibraryUpdated emits a 'library-updated' event for the given
+// library. The UI uses it as a "you should refetch albums" signal and
+// debounces its own refresh.
+func (w *Worker) broadcastLibraryUpdated(libraryID int64) {
+	if w.broadcaster == nil {
+		return
+	}
+	msg := websocket.Message{
+		Type: "library-updated",
+		Data: map[string]int64{"libraryId": libraryID},
+	}
+	if err := w.broadcaster.Broadcast(msg); err != nil {
+		log.Printf("Failed to broadcast library-updated for library %d: %v", libraryID, err)
+	}
+}
+
+// maybeBroadcastLibraryUpdated emits at most one 'library-updated' event per
+// library per libraryUpdatedThrottle window. Used inside the per-track loop
+// so a 10k-track scan doesn't fan out 10k WS messages.
+func (w *Worker) maybeBroadcastLibraryUpdated(libraryID int64) {
+	now := time.Now()
+	last := w.lastLibraryUpdatedBroadcast[libraryID]
+	if now.Sub(last) < w.libraryUpdatedThrottle {
+		return
+	}
+	w.broadcastLibraryUpdated(libraryID)
+	w.lastLibraryUpdatedBroadcast[libraryID] = now
 }

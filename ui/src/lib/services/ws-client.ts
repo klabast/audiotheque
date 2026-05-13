@@ -7,10 +7,20 @@
 
 export type WebSocketMessageType =
 	| 'scan-progress'
+	| 'library-updated'
 	| 'playback-position'
 	| 'playback-session'
 	| 'client-id'
 	| 'transfer-target';
+
+/**
+ * Sent when the catalogue for a library has changed in a way the UI should
+ * reflect (album/track inserted, scan completed). The frontend reacts by
+ * refetching the affected library — no payload beyond the id is needed.
+ */
+export interface LibraryUpdatedData {
+	libraryId: number;
+}
 
 export interface WebSocketMessage {
 	type: WebSocketMessageType;

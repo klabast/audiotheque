@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"database/sql"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,7 +12,30 @@ import (
 
 	"audiod/internal/database"
 	"audiod/internal/library"
+	"audiod/internal/websocket"
 )
+
+// mockBroadcaster records every message it's asked to send so tests can
+// assert what the worker emitted.
+type mockBroadcaster struct {
+	mu       sync.Mutex
+	messages []websocket.Message
+}
+
+func (m *mockBroadcaster) Broadcast(msg websocket.Message) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.messages = append(m.messages, msg)
+	return nil
+}
+
+func (m *mockBroadcaster) snapshot() []websocket.Message {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]websocket.Message, len(m.messages))
+	copy(out, m.messages)
+	return out
+}
 
 // setupTestWorker wires up an in-memory SQLite DB with all migrations applied,
 // seeds a single library row, and returns a Worker bound to a real Repository
@@ -149,4 +173,65 @@ func TestWorker_PeriodicallyResetsStaleOrphans(t *testing.T) {
 		t.Fatal("scan_queue row was deleted; expected it to be reset to 'pending'")
 	}
 	t.Fatalf("periodic maintenance did not reset stale 'running' row; final status = %q", job.Status)
+}
+
+// TestWorker_broadcastLibraryUpdated_EmitsMessage is the unit test for the new
+// 'library-updated' event. The UI subscribes to this to refetch albums live
+// during a scan (bugs 3 + 4 — combined scan-progress global-store refactor).
+func TestWorker_broadcastLibraryUpdated_EmitsMessage(t *testing.T) {
+	w, _, _, _ := setupTestWorker(t)
+	mb := &mockBroadcaster{}
+	w.broadcaster = mb
+
+	w.broadcastLibraryUpdated(42)
+
+	msgs := mb.snapshot()
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 broadcast, got %d", len(msgs))
+	}
+	if msgs[0].Type != "library-updated" {
+		t.Fatalf("type: want %q, got %q", "library-updated", msgs[0].Type)
+	}
+	// Payload must carry the affected libraryId so the UI knows what to refetch.
+	data, ok := msgs[0].Data.(map[string]int64)
+	if !ok {
+		t.Fatalf("data: want map[string]int64, got %T", msgs[0].Data)
+	}
+	if data["libraryId"] != 42 {
+		t.Fatalf("libraryId: want 42, got %d", data["libraryId"])
+	}
+}
+
+// TestWorker_maybeBroadcastLibraryUpdated_Throttles ensures per-track emissions
+// during a big scan don't flood the WebSocket. A single library should only
+// see one event per libraryUpdatedThrottle window.
+func TestWorker_maybeBroadcastLibraryUpdated_Throttles(t *testing.T) {
+	w, _, _, _ := setupTestWorker(t)
+	mb := &mockBroadcaster{}
+	w.broadcaster = mb
+	// Short window so the test stays fast.
+	w.libraryUpdatedThrottle = 100 * time.Millisecond
+
+	// First call goes through.
+	w.maybeBroadcastLibraryUpdated(7)
+	// Immediate second call is suppressed.
+	w.maybeBroadcastLibraryUpdated(7)
+	w.maybeBroadcastLibraryUpdated(7)
+
+	if got := len(mb.snapshot()); got != 1 {
+		t.Fatalf("expected throttled to 1 broadcast, got %d", got)
+	}
+
+	// A different library is not throttled by the first one's window.
+	w.maybeBroadcastLibraryUpdated(8)
+	if got := len(mb.snapshot()); got != 2 {
+		t.Fatalf("expected per-library throttling, got %d total broadcasts", got)
+	}
+
+	// Waiting past the window lets the next emission through.
+	time.Sleep(120 * time.Millisecond)
+	w.maybeBroadcastLibraryUpdated(7)
+	if got := len(mb.snapshot()); got != 3 {
+		t.Fatalf("expected 3 broadcasts after window elapsed, got %d", got)
+	}
 }
