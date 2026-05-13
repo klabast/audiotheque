@@ -10,6 +10,27 @@
 		<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" />
 		<meta content="Audiotheque" name="apple-mobile-web-app-title" />
 		<meta content="width=device-width, initial-scale=1" name="viewport" />
+		<script>
+			// Pre-hydration FOUC blocker: applies the persisted theme to <html>
+			// before first paint so a reload in dark mode never flashes light.
+			// Mirrors resolveTheme() in src/lib/stores/theme.svelte.ts — keep
+			// both in sync. The storage key MUST match THEME_STORAGE_KEY.
+			(function () {
+				try {
+					var stored = localStorage.getItem('audiod-theme');
+					var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+					var effective;
+					if (stored === 'light') effective = 'light';
+					else if (stored === 'dark') effective = 'dark';
+					else effective = prefersDark ? 'dark' : 'light';
+					if (effective === 'dark') {
+						document.documentElement.classList.add('dark');
+					}
+				} catch (_) {
+					/* localStorage unavailable — fall back to the SSR default. */
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
