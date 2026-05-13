@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Buttons - Audiotheque Building Blocks</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-4xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<div class="flex items-center gap-4">
+				<a href="/" class="text-text-secondary hover:text-text-primary transition-colors">
+					<div class="i-lucide-arrow-left w-5 h-5"></div>
+				</a>
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider">Building Blocks</div>
+					<h1 class="text-2xl font-bold">Buttons</h1>
+				</div>
+			</div>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<!-- Text Buttons -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Text Buttons</h2>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- Primary -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Primary</div>
+						<div class="text-xs text-text-muted">Main actions</div>
+					</div>
+					<button class="btn btn-primary">Save Changes</button>
+					<button class="btn btn-primary" disabled>Disabled</button>
+					<div class="text-xs text-text-muted font-mono">btn btn-primary</div>
+				</div>
+
+				<!-- Secondary -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Secondary</div>
+						<div class="text-xs text-text-muted">Secondary actions</div>
+					</div>
+					<button class="btn btn-secondary">Cancel</button>
+					<button class="btn btn-secondary" disabled>Disabled</button>
+					<div class="text-xs text-text-muted font-mono">btn btn-secondary</div>
+				</div>
+
+				<!-- Ghost -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Ghost</div>
+						<div class="text-xs text-text-muted">Subtle actions</div>
+					</div>
+					<button class="btn btn-ghost">Learn More</button>
+					<button class="btn btn-ghost" disabled>Disabled</button>
+					<div class="text-xs text-text-muted font-mono">btn btn-ghost</div>
+				</div>
+
+				<!-- Action (Green) -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Action</div>
+						<div class="text-xs text-text-muted">Play, confirm</div>
+					</div>
+					<button class="btn btn-action px-4 py-2 rounded-lg font-medium">Play Now</button>
+					<div class="text-xs text-text-muted font-mono">btn-action (+ layout)</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Icon Buttons - Desktop -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Icon Buttons (Desktop)</h2>
+			<p class="text-sm text-text-secondary mb-4">32x32px with hover states for desktop</p>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- player-btn -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Default</div>
+						<div class="text-xs text-text-muted">Controls</div>
+					</div>
+					<div class="flex gap-2">
+						<button class="player-btn"><div class="i-lucide-skip-back w-4 h-4"></div></button>
+						<button class="player-btn"><div class="i-lucide-play w-4 h-4"></div></button>
+						<button class="player-btn"><div class="i-lucide-skip-forward w-4 h-4"></div></button>
+					</div>
+					<div class="text-xs text-text-muted font-mono">player-btn</div>
+				</div>
+
+				<!-- player-btn-muted -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Muted</div>
+						<div class="text-xs text-text-muted">Secondary icons</div>
+					</div>
+					<div class="flex gap-2">
+						<button class="player-btn-muted"><div class="i-lucide-shuffle w-4 h-4"></div></button>
+						<button class="player-btn-muted"><div class="i-lucide-repeat w-4 h-4"></div></button>
+					</div>
+					<div class="text-xs text-text-muted font-mono">player-btn-muted</div>
+				</div>
+
+				</div>
+		</section>
+
+		<!-- Icon Buttons - Mobile -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Icon Buttons (Mobile)</h2>
+			<p class="text-sm text-text-secondary mb-4">44px+ touch targets with active states (no hover)</p>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- player-btn-mobile -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Standard</div>
+						<div class="text-xs text-text-muted">44x44px</div>
+					</div>
+					<div class="flex gap-2">
+						<button class="player-btn-mobile"><div class="i-lucide-skip-back w-6 h-6"></div></button>
+						<button class="player-btn-mobile"><div class="i-lucide-skip-forward w-6 h-6"></div></button>
+					</div>
+					<div class="text-xs text-text-muted font-mono">player-btn-mobile</div>
+				</div>
+
+				<!-- player-btn-mobile-lg -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Large</div>
+						<div class="text-xs text-text-muted">56x56px</div>
+					</div>
+					<div class="flex gap-2">
+						<button class="player-btn-mobile-lg"><div class="i-lucide-skip-back w-7 h-7"></div></button>
+						<button class="player-btn-mobile-lg"><div class="i-lucide-skip-forward w-7 h-7"></div></button>
+					</div>
+					<div class="text-xs text-text-muted font-mono">player-btn-mobile-lg</div>
+				</div>
+
+				<!-- player-btn-mobile-play -->
+				<div class="flex items-center gap-6">
+					<div class="w-32 flex-shrink-0">
+						<div class="text-sm font-medium">Play (CTA)</div>
+						<div class="text-xs text-text-muted">72x72px green</div>
+					</div>
+					<button class="player-btn-mobile-play"><div class="i-lucide-play w-8 h-8"></div></button>
+					<div class="text-xs text-text-muted font-mono">player-btn-mobile-play</div>
+				</div>
+
+				</div>
+		</section>
+
+		<!-- Button with Icon -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Button with Icon</h2>
+			<div class="p-6 bg-surface rounded-lg">
+				<div class="flex flex-wrap gap-4">
+					<button class="btn btn-primary flex items-center gap-2">
+						<div class="i-lucide-plus w-4 h-4"></div>
+						Add Library
+					</button>
+					<button class="btn btn-secondary flex items-center gap-2">
+						<div class="i-lucide-refresh-cw w-4 h-4"></div>
+						Rescan
+					</button>
+					<button class="btn btn-ghost flex items-center gap-2">
+						<div class="i-lucide-settings w-4 h-4"></div>
+						Settings
+					</button>
+				</div>
+			</div>
+		</section>
+
+		<!-- Usage Guide -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Usage Guide</h2>
+			<div class="space-y-3">
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Primary</div>
+					<div class="text-sm text-text-secondary">Main page actions, form submissions, confirmations</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Secondary</div>
+					<div class="text-sm text-text-secondary">Cancel, close, back, alternative actions</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Ghost</div>
+					<div class="text-sm text-text-secondary">Tertiary actions, links that look like buttons</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Action (Green)</div>
+					<div class="text-sm text-text-secondary">Play buttons, positive confirmations, CTAs</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Quick Reference -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Quick Reference</h2>
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-border">
+							<th class="text-left py-3 px-4 font-semibold">Class</th>
+							<th class="text-left py-3 px-4 font-semibold">Size</th>
+							<th class="text-left py-3 px-4 font-semibold">Use For</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">btn btn-primary</td>
+							<td class="py-3 px-4">auto</td>
+							<td class="py-3 px-4 text-text-secondary">Primary actions</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">btn btn-secondary</td>
+							<td class="py-3 px-4">auto</td>
+							<td class="py-3 px-4 text-text-secondary">Secondary actions</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">btn btn-ghost</td>
+							<td class="py-3 px-4">auto</td>
+							<td class="py-3 px-4 text-text-secondary">Subtle actions</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">btn-action</td>
+							<td class="py-3 px-4">auto</td>
+							<td class="py-3 px-4 text-text-secondary">Play, positive CTAs</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">player-btn</td>
+							<td class="py-3 px-4">32x32</td>
+							<td class="py-3 px-4 text-text-secondary">Desktop icon buttons</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">player-btn-mobile</td>
+							<td class="py-3 px-4">44x44</td>
+							<td class="py-3 px-4 text-text-secondary">Mobile icon buttons</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">player-btn-mobile-play</td>
+							<td class="py-3 px-4">72x72</td>
+							<td class="py-3 px-4 text-text-secondary">Mobile play button</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

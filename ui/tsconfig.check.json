@@ -1,0 +1,9 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		// Disable strict checks for svelte-check
+		// Generated code will have unused variables
+		"noUnusedLocals": false,
+		"noUnusedParameters": false
+	}
+}

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Inputs - Audiotheque Building Blocks</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-4xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<div class="flex items-center gap-4">
+				<a href="/" class="text-text-secondary hover:text-text-primary transition-colors">
+					<div class="i-lucide-arrow-left w-5 h-5"></div>
+				</a>
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider">Building Blocks</div>
+					<h1 class="text-2xl font-bold">Inputs</h1>
+				</div>
+			</div>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<!-- Text Input -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Text Input</h2>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- Default -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Default</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Email Address</label>
+					<input
+						type="email"
+						placeholder="you@example.com"
+						class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+					>
+					<div class="text-xs text-text-muted font-mono mt-2">form-input</div>
+				</div>
+
+				<!-- With Helper -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">With Helper Text</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Password</label>
+					<input
+						type="password"
+						placeholder="Enter password"
+						class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+					>
+					<p class="text-xs text-text-muted mt-1">Must be at least 8 characters</p>
+				</div>
+
+				<!-- Error State -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Error State</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Username</label>
+					<input
+						type="text"
+						value="ab"
+						class="w-full rounded-lg border border-error bg-surface-alt px-4 py-3 text-text-primary focus:outline-none focus:ring-2 focus:ring-error/20"
+					>
+					<p class="text-xs text-error mt-1">Username must be at least 3 characters</p>
+				</div>
+
+				<!-- Disabled -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Disabled</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Read Only</label>
+					<input
+						type="text"
+						value="Cannot edit this"
+						disabled
+						class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-muted cursor-not-allowed opacity-50"
+					>
+				</div>
+			</div>
+		</section>
+
+		<!-- Select -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Select</h2>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- Default -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Default</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Theme</label>
+					<select class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+						<option>System</option>
+						<option>Light</option>
+						<option>Dark</option>
+					</select>
+					<div class="text-xs text-text-muted font-mono mt-2">form-select</div>
+				</div>
+
+				<!-- With Helper -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">With Helper</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Language</label>
+					<select class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+						<option>English</option>
+						<option>German</option>
+						<option>French</option>
+					</select>
+					<p class="text-xs text-text-muted mt-1">This changes the interface language</p>
+				</div>
+			</div>
+		</section>
+
+		<!-- Form Layout -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Form Layout Example</h2>
+			<div class="p-6 bg-surface rounded-lg max-w-md">
+				<h4 class="text-lg font-semibold text-text-primary mb-4">Create Account</h4>
+
+				<div class="space-y-4">
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">Full Name</label>
+						<input
+							type="text"
+							placeholder="John Doe"
+							class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+						>
+					</div>
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">Email</label>
+						<input
+							type="email"
+							placeholder="john@example.com"
+							class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+						>
+					</div>
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">Password</label>
+						<input
+							type="password"
+							placeholder="Create a password"
+							class="w-full rounded-lg border border-border bg-surface-alt px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+						>
+						<p class="text-xs text-text-muted mt-1">Must be at least 8 characters</p>
+					</div>
+					<div class="pt-2">
+						<button class="btn btn-primary w-full">Create Account</button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Input Specs -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Specifications</h2>
+			<div class="space-y-3">
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Height</div>
+					<div class="text-sm text-text-secondary">48px (py-3)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Border Radius</div>
+					<div class="text-sm text-text-secondary">8px (rounded-lg)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Padding</div>
+					<div class="text-sm text-text-secondary">16px horizontal (px-4)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Font Size</div>
+					<div class="text-sm text-text-secondary">16px (text-base) - prevents iOS zoom</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Focus Ring</div>
+					<div class="text-sm text-text-secondary">2px primary with 20% opacity</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Quick Reference -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Quick Reference</h2>
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-border">
+							<th class="text-left py-3 px-4 font-semibold">Element</th>
+							<th class="text-left py-3 px-4 font-semibold">Classes</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						<tr>
+							<td class="py-3 px-4 font-medium">Input</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">form-input</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-medium">Select</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">form-select</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-medium">Label</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">form-label</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-medium">Helper Text</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">text-xs text-text-muted mt-1</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-medium">Error Text</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">text-xs text-error mt-1</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-medium">Error Border</td>
+							<td class="py-3 px-4 font-mono text-xs text-text-secondary">border-error</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

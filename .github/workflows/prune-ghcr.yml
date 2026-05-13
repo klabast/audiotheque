@@ -1,0 +1,90 @@
+# Prune old GHCR candidate images.
+#
+# Every push to main publishes ghcr.io/klabast/audiotheque:sha-<commit> and
+# every test-mpd source change publishes ghcr.io/klabast/audiotheque-test-mpd:sha-<commit>.
+# Nothing reaps them on its own — that's the meter we're trimming.
+#
+# This workflow keeps the 10 most-recent versions of each package plus
+# anything tagged `latest` or a semver release (`v1.2.3`). Everything
+# else gets reaped weekly.
+#
+# Implementation note: we use `gh api` directly rather than the
+# upstream `actions/delete-package-versions` action — that action is
+# still on Node 20 (last release Jan 2024) and triggers the GitHub
+# Node-20 deprecation warning. A shell script using `gh` (Go binary,
+# no Node) avoids that dependency entirely.
+#
+# Trigger manually via `workflow_dispatch` to do an immediate cleanup.
+
+name: Prune GHCR images
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Monday 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  prune:
+    name: Prune ${{ matrix.package }} versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [audiotheque, audiotheque-test-mpd]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OWNER: klabast
+      PACKAGE: ${{ matrix.package }}
+      KEEP: "10"
+      # Tag patterns to preserve forever. Anything matching is never
+      # deleted regardless of age — semver releases and `latest`.
+      KEEP_TAG_REGEX: '^(latest|v[0-9]+(\.[0-9]+)*)$'
+    steps:
+      - name: Prune ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+
+          # List versions newest-first.
+          versions=$(gh api --paginate \
+            "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq 'sort_by(.created_at) | reverse')
+
+          total=$(echo "$versions" | jq 'length')
+          echo "::notice::Found $total version(s) of $PACKAGE"
+
+          # Walk every version. Keep the first $KEEP; for the rest,
+          # delete unless any tag matches $KEEP_TAG_REGEX.
+          echo "$versions" | jq -c '.[]' | nl -ba | while read -r idx version; do
+            id=$(echo "$version" | jq -r '.id')
+            tags=$(echo "$version" | jq -r '.metadata.container.tags // [] | join(",")')
+
+            if [ "$idx" -le "$KEEP" ]; then
+              echo "keep[recent #$idx] id=$id tags=[$tags]"
+              continue
+            fi
+
+            # Tag-based preserve check. An empty tag list (untagged
+            # layer / dangling manifest) falls through to delete.
+            preserved=false
+            if [ -n "$tags" ]; then
+              for tag in ${tags//,/ }; do
+                if echo "$tag" | grep -E "$KEEP_TAG_REGEX" >/dev/null; then
+                  preserved=true
+                  break
+                fi
+              done
+            fi
+
+            if $preserved; then
+              echo "keep[release] id=$id tags=[$tags]"
+              continue
+            fi
+
+            echo "delete id=$id tags=[$tags]"
+            gh api -X DELETE \
+              "/users/${OWNER}/packages/container/${PACKAGE}/versions/${id}" \
+              || echo "::warning::failed to delete version $id"
+          done

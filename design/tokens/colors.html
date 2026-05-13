@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Colors - Audiotheque Design Tokens</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-4xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<div class="flex items-center gap-4">
+				<a href="/" class="text-text-secondary hover:text-text-primary transition-colors">
+					<div class="i-lucide-arrow-left w-5 h-5"></div>
+				</a>
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider">Tokens</div>
+					<h1 class="text-2xl font-bold">Colors</h1>
+				</div>
+			</div>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<!-- Brand Colors -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Brand</h2>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div>
+					<div class="h-16 rounded-lg bg-primary mb-2"></div>
+					<div class="text-sm font-medium">primary</div>
+					<div class="text-xs text-text-muted font-mono">#6b6fbf</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-primary-muted mb-2"></div>
+					<div class="text-sm font-medium">primary-muted</div>
+					<div class="text-xs text-text-muted font-mono">#4a4d85</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-accent mb-2"></div>
+					<div class="text-sm font-medium">accent</div>
+					<div class="text-xs text-text-muted font-mono">#9b59b6</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-action mb-2"></div>
+					<div class="text-sm font-medium">action</div>
+					<div class="text-xs text-text-muted font-mono">#22c55e</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Surface Colors -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Surfaces</h2>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div>
+					<div class="h-16 rounded-lg bg-background border border-border mb-2"></div>
+					<div class="text-sm font-medium">background</div>
+					<div class="text-xs text-text-muted font-mono">#ffffff</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-surface mb-2"></div>
+					<div class="text-sm font-medium">surface</div>
+					<div class="text-xs text-text-muted font-mono">#f5f5f5</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-surface-alt mb-2"></div>
+					<div class="text-sm font-medium">surface-alt</div>
+					<div class="text-xs text-text-muted font-mono">#e8e8e8</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-surface-hover mb-2"></div>
+					<div class="text-sm font-medium">surface-hover</div>
+					<div class="text-xs text-text-muted font-mono">#d4d4d4</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Text Colors -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Text</h2>
+			<div class="grid grid-cols-3 gap-4">
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-lg font-medium text-text-primary mb-1">Primary</div>
+					<div class="text-xs text-text-muted font-mono">text-text-primary</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-lg font-medium text-text-secondary mb-1">Secondary</div>
+					<div class="text-xs text-text-muted font-mono">text-text-secondary</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-lg font-medium text-text-muted mb-1">Muted</div>
+					<div class="text-xs text-text-muted font-mono">text-text-muted</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Semantic Colors -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Semantic</h2>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div>
+					<div class="h-16 rounded-lg bg-success mb-2"></div>
+					<div class="text-sm font-medium">success</div>
+					<div class="text-xs text-text-muted font-mono">#4caf50</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-warning mb-2"></div>
+					<div class="text-sm font-medium">warning</div>
+					<div class="text-xs text-text-muted font-mono">#ffc107</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-error mb-2"></div>
+					<div class="text-sm font-medium">error</div>
+					<div class="text-xs text-text-muted font-mono">#f44336</div>
+				</div>
+				<div>
+					<div class="h-16 rounded-lg bg-info mb-2"></div>
+					<div class="text-sm font-medium">info</div>
+					<div class="text-xs text-text-muted font-mono">#2196f3</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Border Colors -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Borders</h2>
+			<div class="grid grid-cols-2 gap-4">
+				<div class="p-4 border-2 border-border rounded-lg">
+					<div class="text-sm font-medium">border</div>
+					<div class="text-xs text-text-muted font-mono">#e0e0e0</div>
+				</div>
+				<div class="p-4 border-2 border-border-hover rounded-lg">
+					<div class="text-sm font-medium">border-hover</div>
+					<div class="text-xs text-text-muted font-mono">#bdbdbd</div>
+				</div>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

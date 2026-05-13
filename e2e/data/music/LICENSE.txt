@@ -1,0 +1,22 @@
+Test Audio Collection License
+=============================
+
+All audio files in this directory are synthetically generated using FFmpeg
+and contain no copyrighted musical content. The files consist of simple
+sine wave tones generated specifically for software testing purposes.
+
+These files are released into the public domain under the CC0 1.0 Universal
+(CC0 1.0) Public Domain Dedication:
+
+https://creativecommons.org/publicdomain/zero/1.0/
+
+You are free to:
+- Use the files for any purpose
+- Modify the files
+- Distribute the files
+- Use the files in commercial applications
+
+No attribution is required, though appreciated.
+
+Generation script: scripts/generate-test-audio.sh
+Generated with: FFmpeg (https://ffmpeg.org/)

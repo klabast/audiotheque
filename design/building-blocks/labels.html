@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Labels - Audiotheque Building Blocks</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-4xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<div class="flex items-center gap-4">
+				<a href="/" class="text-text-secondary hover:text-text-primary transition-colors">
+					<div class="i-lucide-arrow-left w-5 h-5"></div>
+				</a>
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider">Building Blocks</div>
+					<h1 class="text-2xl font-bold">Labels</h1>
+				</div>
+			</div>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<!-- Label Types -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Label Types</h2>
+			<div class="space-y-6 p-6 bg-surface rounded-lg">
+				<!-- Form Label -->
+				<div class="pb-4 border-b border-border">
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Form Label</div>
+					<label class="text-sm font-medium text-text-secondary block mb-2">Email Address</label>
+					<div class="h-10 bg-surface-alt rounded-lg border border-border"></div>
+					<div class="text-xs text-text-muted font-mono mt-3">text-sm font-medium text-text-secondary block mb-2</div>
+				</div>
+
+				<!-- Section Label -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Section Label (Navigation)</div>
+					<div class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">System</div>
+					<div class="space-y-1">
+						<div class="text-sm text-text-secondary">Settings</div>
+						<div class="text-sm text-text-secondary">Logout</div>
+					</div>
+					<div class="text-xs text-text-muted font-mono mt-3">text-xs font-semibold uppercase tracking-wider text-text-muted</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Form Example -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Example: Settings Form</h2>
+			<div class="p-6 bg-surface rounded-lg max-w-md">
+				<h4 class="text-lg font-semibold text-text-primary mb-4">Change Password</h4>
+
+				<div class="space-y-4">
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">Current Password</label>
+						<div class="h-10 bg-surface-alt rounded-lg border border-border"></div>
+					</div>
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">New Password</label>
+						<div class="h-10 bg-surface-alt rounded-lg border border-border"></div>
+						<p class="text-xs text-text-muted mt-1">Must be at least 8 characters</p>
+					</div>
+					<div>
+						<label class="text-sm font-medium text-text-secondary block mb-2">Confirm Password</label>
+						<div class="h-10 bg-surface-alt rounded-lg border border-border"></div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Navigation Example -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Example: Navigation</h2>
+			<div class="p-6 bg-surface rounded-lg w-64">
+				<div class="text-lg font-bold text-text-primary mb-4">Audiotheque</div>
+
+				<div class="space-y-1 mb-4">
+					<div class="text-sm font-medium text-text-primary">Home</div>
+					<div class="text-sm text-text-secondary">Search</div>
+				</div>
+
+				<div class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">Library</div>
+				<div class="space-y-1 mb-4">
+					<div class="text-sm text-text-secondary">Playlists</div>
+					<div class="text-sm text-text-secondary">Albums</div>
+				</div>
+
+				<div class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">System</div>
+				<div class="space-y-1">
+					<div class="text-sm text-text-secondary">Settings</div>
+					<div class="text-sm text-error">Logout</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Usage Guide -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Usage Guide</h2>
+			<div class="space-y-3">
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Form Label</div>
+					<div class="text-sm text-text-secondary">Use for input fields, selects, and other form controls. Always paired with an input.</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg">
+					<div class="text-sm font-medium text-text-primary mb-1">Section Label</div>
+					<div class="text-sm text-text-secondary">Use to group related navigation items or list sections. Uppercase with wider tracking.</div>
+				</div>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

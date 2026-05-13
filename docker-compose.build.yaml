@@ -1,0 +1,39 @@
+# docker-compose.build.yaml - For building images locally with pre-built base
+
+services:
+  # Build the base images first (only needed once)
+  audiod-base-builder:
+    image: audiod-base:builder
+    build:
+      context: .
+      dockerfile: Dockerfile.prebuild
+      target: audiod-builder
+      platforms:
+        - linux/amd64
+        - linux/arm64
+
+  audiod-base-runtime:
+    image: audiod-base:runtime
+    build:
+      context: .
+      dockerfile: Dockerfile.prebuild
+      target: audiod-runtime
+      platforms:
+        - linux/amd64
+        - linux/arm64
+
+  # Build the main application using local base images
+  audiod:
+    image: audiotheque:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: audiod-base:builder
+        RUNTIME_IMAGE: audiod-base:runtime
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    depends_on:
+      - audiod-base-builder
+      - audiod-base-runtime

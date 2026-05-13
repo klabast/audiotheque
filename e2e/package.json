@@ -1,0 +1,24 @@
+{
+  "name": "audiotheque-e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "update": "npx npm-check-updates -i --format group",
+    "test": "npm run test:desktop && npm run test:tablet && npm run test:mobile",
+    "test:headed": "npm run test:desktop:headed && npm run test:tablet:headed && npm run test:mobile:headed",
+    "test:ci": "CI_MODE=true npm test",
+    "test:desktop": "DEVICE=desktop cucumber-js --tags '@desktop or not (@mobile or @tablet)'",
+    "test:desktop:headed": "HEADLESS=false npm run test:desktop",
+    "test:tablet": "DEVICE=tablet cucumber-js --tags '@tablet'",
+    "test:tablet:headed": "HEADLESS=false npm run test:tablet",
+    "test:mobile": "DEVICE=mobile cucumber-js --tags '@mobile'",
+    "test:mobile:headed": "HEADLESS=false npm run test:mobile"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "12.8.3",
+    "@playwright/test": "1.60.0",
+    "@types/node": "25.7.0",
+    "ts-node": "10.9.2",
+    "typescript": "6.0.3"
+  }
+}

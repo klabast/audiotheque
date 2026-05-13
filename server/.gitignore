@@ -1,0 +1,10 @@
+bin/
+uploads/
+music/
+data/
+transcode-cache/
+
+.DS_Store.env
+
+# go binary
+audiod

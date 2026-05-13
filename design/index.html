@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Audiotheque Design Workbench</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-5xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<h1 class="text-3xl font-bold">Audiotheque Design Workbench</h1>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<p class="text-text-secondary mb-10">Design system documentation for Audiotheque. Source of truth for visual design before implementation.</p>
+
+		<!-- Tokens -->
+		<section class="mb-10">
+			<h2 class="text-xl font-semibold mb-2">Tokens</h2>
+			<p class="text-text-muted text-sm mb-4">Design primitives: colors, typography scale, spacing</p>
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+				<a href="/tokens/colors.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Colors</h3>
+					<p class="text-sm text-text-secondary">Brand, surface, text, and semantic colors</p>
+				</a>
+				<a href="/tokens/typography.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Typography</h3>
+					<p class="text-sm text-text-secondary">Font families, sizes, weights</p>
+				</a>
+				<a href="/tokens/spacing.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Spacing</h3>
+					<p class="text-sm text-text-secondary">Spacing scale, touch targets, radius</p>
+				</a>
+			</div>
+		</section>
+
+		<!-- Building Blocks -->
+		<section class="mb-10">
+			<h2 class="text-xl font-semibold mb-2">Building Blocks</h2>
+			<p class="text-text-muted text-sm mb-4">Small, reusable UI elements</p>
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+				<a href="/building-blocks/headings.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Headings</h3>
+					<p class="text-sm text-text-secondary">h1-h4 hierarchy</p>
+				</a>
+				<a href="/building-blocks/text.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Text</h3>
+					<p class="text-sm text-text-secondary">Body, captions, special</p>
+				</a>
+				<a href="/building-blocks/labels.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Labels</h3>
+					<p class="text-sm text-text-secondary">Form and section labels</p>
+				</a>
+				<a href="/building-blocks/buttons.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Buttons</h3>
+					<p class="text-sm text-text-secondary">Variants and sizes</p>
+				</a>
+				<a href="/building-blocks/alerts.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Alerts</h3>
+					<p class="text-sm text-text-secondary">Feedback messages</p>
+				</a>
+				<a href="/building-blocks/inputs.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Inputs</h3>
+					<p class="text-sm text-text-secondary">Text, select, forms</p>
+				</a>
+				<a href="/building-blocks/cards.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Cards</h3>
+					<p class="text-sm text-text-secondary">Containers and sections</p>
+				</a>
+				<a href="/building-blocks/modals.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Modals</h3>
+					<p class="text-sm text-text-secondary">Dialogs and overlays</p>
+				</a>
+				<a href="/building-blocks/layout.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Layout</h3>
+					<p class="text-sm text-text-secondary">Stacks, rows, spacing</p>
+				</a>
+				<a href="/building-blocks/utilities.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Utilities</h3>
+					<p class="text-sm text-text-secondary">Badge, spinner, progress</p>
+				</a>
+			</div>
+		</section>
+
+		<!-- Components -->
+		<section class="mb-10">
+			<h2 class="text-xl font-semibold mb-2">Components</h2>
+			<p class="text-text-muted text-sm mb-4">Composed UI patterns with device frames</p>
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+				<a href="/components/player-bar.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Player Bar</h3>
+					<p class="text-sm text-text-secondary">Track info, controls, volume</p>
+				</a>
+				<a href="/components/album-grid.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Album Grid</h3>
+					<p class="text-sm text-text-secondary">Album cards with hover</p>
+				</a>
+				<a href="/components/album-detail.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Album Detail</h3>
+					<p class="text-sm text-text-secondary">Header and track list</p>
+				</a>
+				<a href="/components/sidebar.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Sidebar</h3>
+					<p class="text-sm text-text-secondary">Navigation menu</p>
+				</a>
+				<a href="/components/forms.html" class="p-4 bg-surface border border-border rounded-lg hover:border-primary transition-colors">
+					<h3 class="font-semibold mb-1">Forms</h3>
+					<p class="text-sm text-text-secondary">Settings patterns</p>
+				</a>
+			</div>
+		</section>
+
+		<!-- Token Source Files -->
+		<section>
+			<h2 class="text-xl font-semibold mb-2">Token Source Files</h2>
+			<p class="text-text-muted text-sm mb-4">JSON data for design tokens</p>
+			<div class="flex flex-wrap gap-3">
+				<code class="text-sm text-accent bg-surface-alt px-3 py-1.5 rounded">/token/colors.json</code>
+				<code class="text-sm text-accent bg-surface-alt px-3 py-1.5 rounded">/token/typography.json</code>
+				<code class="text-sm text-accent bg-surface-alt px-3 py-1.5 rounded">/token/fonts.json</code>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

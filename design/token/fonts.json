@@ -1,0 +1,10 @@
+{
+  "google": {
+    "families": ["Inter:wght@400;500;600;700"],
+    "display": "swap"
+  },
+  "preconnect": [
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com"
+  ]
+}

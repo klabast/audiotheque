@@ -1,0 +1,38 @@
+services:
+  audiod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8880:8880"
+    volumes:
+      - ./e2e/data/music:/app/music:ro
+    environment:
+      - AUDIOD_PORT=8880
+      - MUSIC_LIBRARY_PATH=/app/music
+      - MPD_HOSTS=test-mpd:6600
+      - ENABLE_MDNS_DISCOVERY=false
+      - AUDIOD_PUBLIC_URL=audiod:8880
+    depends_on:
+      test-mpd:
+        condition: service_healthy
+
+  test-mpd:
+    # Default to the prebuilt image from GHCR — `tools/test-mpd/` rarely
+    # changes, so we rebuild + push only when its source moves
+    # (.github/workflows/test-mpd-image.yml). `build:` is still here so
+    # `docker compose build test-mpd` works locally if the image isn't
+    # cached yet, and so PRs that change test-mpd don't have to wait for
+    # the publish workflow.
+    image: ghcr.io/klabast/audiotheque-test-mpd:latest
+    build:
+      context: ./tools/test-mpd
+      dockerfile: Dockerfile
+    ports:
+      - "6600:6600"
+      - "6601:6601"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6601/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 5

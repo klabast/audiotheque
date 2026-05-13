@@ -1,0 +1,10 @@
+bin/
+uploads/
+music/
+transcode-cache/
+
+.DS_Store
+docker-compose.yaml
+Dockerfile
+README.md
+testing.md

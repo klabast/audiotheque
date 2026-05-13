@@ -1,0 +1,14 @@
+FROM alpine:3.19
+
+# Install ffmpeg
+RUN apk add --no-cache ffmpeg bash
+
+# Copy the generation script
+COPY generate-test-audio.sh /usr/local/bin/generate-test-audio.sh
+RUN chmod +x /usr/local/bin/generate-test-audio.sh
+
+# Set working directory
+WORKDIR /output
+
+# Run the script
+ENTRYPOINT ["/usr/local/bin/generate-test-audio.sh"]

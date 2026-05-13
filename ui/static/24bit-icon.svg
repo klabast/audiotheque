@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="240mm"
+   height="160mm"
+   viewBox="0 0 240 160"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   sodipodi:docname="24bit-icon.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showguides="false"
+     inkscape:zoom="0.78216891"
+     inkscape:cx="396.97308"
+     inkscape:cy="357.33969"
+     inkscape:window-width="1664"
+     inkscape:window-height="942"
+     inkscape:window-x="49"
+     inkscape:window-y="25"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#ffcc00;stroke-width:0.307871;stroke-dasharray:none;paint-order:markers stroke fill"
+       id="rect2-8"
+       width="240"
+       height="160"
+       x="0"
+       y="0"
+       ry="19.907841"
+       inkscape:label="border" />
+    <rect
+       style="fill:#252525;stroke-width:0.259697;stroke-dasharray:none;paint-order:markers fill stroke;fill-opacity:1"
+       id="rect2"
+       width="210"
+       height="130"
+       x="15"
+       y="15"
+       ry="16.175123"
+       inkscape:label="black" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:83.8925px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffd42a;fill-opacity:1;stroke-width:0.572217;stroke-dasharray:none;paint-order:markers stroke fill"
+       x="20.963898"
+       y="107.42181"
+       id="text2"
+       inkscape:label="text"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         style="font-style:normal;font-variant:normal;font-weight:800;font-stretch:normal;font-size:83.8925px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Ultra-Bold';fill:#ffd42a;stroke-width:0.57222"
+         x="20.963898"
+         y="107.42181">24BIT</tspan></text>
+  </g>
+</svg>

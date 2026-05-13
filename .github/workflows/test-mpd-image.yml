@@ -1,0 +1,61 @@
+name: test-mpd image
+
+# Build and publish the test-mpd Docker image used by E2E tests.
+# Triggered only when its source changes — image is otherwise reused
+# across all CI runs via GHCR.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/test-mpd/**"
+      - ".github/workflows/test-mpd-image.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/test-mpd/**"
+      - ".github/workflows/test-mpd-image.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      # Login only when we actually push. PR builds verify the image
+      # still builds (cache-hit catches Dockerfile regressions) but
+      # don't write to Packages storage — the E2E acceptance job builds
+      # test-mpd locally via docker-compose, so it doesn't need a
+      # pushed PR image either.
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # On main / workflow_dispatch: push :sha-<short> + :latest.
+      # On PR: build only — no registry write, no GHCR storage cost.
+      - uses: docker/build-push-action@v7
+        with:
+          context: tools/test-mpd
+          file: tools/test-mpd/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/klabast/audiotheque-test-mpd:sha-${{ steps.sha.outputs.short }}
+            ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && 'ghcr.io/klabast/audiotheque-test-mpd:latest' || '' }}
+          cache-from: type=gha,scope=test-mpd
+          cache-to: type=gha,mode=max,scope=test-mpd

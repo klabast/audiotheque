@@ -1,0 +1,25 @@
+services:
+  audiod:
+    # To build with pre-built base images, use: docker-compose -f docker-compose.build.yaml build
+    build:
+      dockerfile: Dockerfile
+      # Optionally specify base images:
+      # args:
+      #   BASE_IMAGE: ghcr.io/klabast/audiotheque-base:builder
+      #   RUNTIME_IMAGE: ghcr.io/klabast/audiotheque-base:latest
+#    platform: linux/amd64
+    ports:
+      - "8080:8080"
+    volumes:
+      # Point the left side at your own music collection.
+      - /path/to/your/music:/app/music:delegated
+      - ./server/data:/app/data
+    environment:
+      - MUSIC_LIBRARY_PATH=/app/music
+      # Manual MPD hosts (comma-separated). Replace with your own.
+      - MPD_HOSTS=mpd-host:6600
+      # Enable/disable mDNS discovery (default: enabled)
+      - ENABLE_MDNS_DISCOVERY=true
+      # Public URL for MPD streaming (set this to your server's reachable IP:port)
+      # - AUDIOD_PUBLIC_URL=192.168.1.100:8080
+    restart: unless-stopped

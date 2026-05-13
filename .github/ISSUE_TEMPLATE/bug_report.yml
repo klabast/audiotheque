@@ -1,0 +1,76 @@
+name: Bug report
+description: Something isn't working as expected.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+assignees: ["klabast"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more concrete the
+        repro, the faster the fix. For security-sensitive issues please
+        use the channel described in `SECURITY.md` instead of this form.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+      placeholder: |
+        Steps to reproduce:
+        1. …
+        2. …
+        3. …
+
+        Expected: …
+        Actual:   …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA (`git rev-parse --short HEAD`) or release tag.
+      placeholder: "e.g. sha-c0d07aa or v0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker (docker-compose)
+        - Bare binary
+        - Local dev (npm run dev / go run)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + OS
+      description: Only required for UI bugs.
+      placeholder: "e.g. Safari 18 on macOS 15, Firefox 130 on Ubuntu 24.04"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Paste server logs (`docker compose logs audiod`) and any
+        browser-console errors. Redact tokens and personal info.
+      render: shell
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: This is not a security-sensitive issue (those go through the private security-advisory channel — see SECURITY.md).
+          required: true

@@ -1,0 +1,92 @@
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+testing.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Server specific
+server/bin/
+server/uploads/
+server/music/
+server/transcode-cache/
+
+# UI - Node.js dependencies
+ui/node_modules/
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+ui/pnpm-debug.log*
+
+# UI - Build outputs
+ui/build/
+ui/dist/
+ui/.output/
+ui/.svelte-kit/
+ui/.next/
+
+# UI - Development files
+ui/.env
+ui/.env.local
+ui/.env.development.local
+ui/.env.test.local
+ui/.env.production.local
+
+# UI - Testing
+ui/coverage/
+ui/.nyc_output/
+ui/.coverage/
+ui/test-results/
+ui/playwright-report/
+ui/playwright/.cache/
+
+# UI - Cache directories
+ui/.npm
+ui/.eslintcache
+ui/.cache/
+ui/.parcel-cache/
+ui/.vite/
+
+# UI - Storybook
+ui/storybook-static/
+
+# Global logs and runtime
+logs/
+*.log
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary folders
+tmp/
+temp/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml

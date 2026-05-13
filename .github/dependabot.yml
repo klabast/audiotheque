@@ -1,0 +1,164 @@
+# Dependabot — automated dependency updates.
+#
+# Scope: every critical ecosystem we ship (GitHub Actions, Go modules,
+# npm in ui/ and e2e/, Docker base images). Security updates land
+# immediately and ignore the weekly schedule; cosmetic-only "version
+# updates" follow the cadence below.
+#
+# Conventions:
+#   - Weekly cadence (Monday 06:00 UTC) — avoids daily noise without
+#     letting CVEs sit. Security updates always bypass the schedule.
+#   - Minor/patch updates grouped per ecosystem → one PR per week max.
+#   - Major updates land as individual PRs so breaking changes get
+#     undivided attention.
+#   - Every PR is assigned to klabast and labelled `dependencies`.
+#   - Commit prefix `chore(deps):` keeps the log scannable.
+
+version: 2
+
+updates:
+  # -------------------- GitHub Actions ----------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+
+  # -------------------- Go modules: server ------------------------------
+  - package-ecosystem: "gomod"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "go"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      server-go-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+
+  # -------------------- Go modules: tools/test-mpd ----------------------
+  - package-ecosystem: "gomod"
+    directory: "/tools/test-mpd"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "go", "test-mpd"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      test-mpd-go-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+
+  # -------------------- npm: ui -----------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "ui"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      ui-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    # The Svelte/Kit toolchain has tight coupling to TypeScript's major
+    # line (svelte-check pins a supported TS range per release; bumping
+    # TS past that breaks `npm run check` before svelte-check ships
+    # support). Same shape for the rest of the framework-locked deps
+    # below — let minor/patch flow for security fixes, hold majors for
+    # a manual bump that lines all four up at once.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "svelte"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "svelte-check"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@sveltejs/kit"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@sveltejs/vite-plugin-svelte"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 5
+
+  # -------------------- npm: e2e ----------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "e2e"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      e2e-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+
+  # -------------------- Docker: audiod image -----------------------
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    open-pull-requests-limit: 5
+
+  # -------------------- Docker: test-mpd image --------------------------
+  - package-ecosystem: "docker"
+    directory: "/tools/test-mpd"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    assignees: ["klabast"]
+    labels: ["dependencies", "docker", "test-mpd"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    open-pull-requests-limit: 5

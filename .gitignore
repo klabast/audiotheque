@@ -1,0 +1,22 @@
+.DS_Store
+.idea
+.*.flac
+.env
+docs/dev/diary/
+docs/dev/plans/
+node_modules/
+server/api/spec/
+ui/src/lib/api/generated/
+e2e/reports/
+e2e/data/fma_small/
+server/main
+server/audiod
+
+# Claude Code local config — kept on disk for local dev, never committed.
+# Matches CLAUDE.md at any depth (root + per-package) and the whole
+# .claude/ dir (agents, commands, settings, scheduled-task locks).
+CLAUDE.md
+.claude/
+
+# Local Go build of the test MPD helper
+tools/test-mpd/test-mpd

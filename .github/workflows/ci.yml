@@ -1,0 +1,209 @@
+name: CD Pipeline
+
+# Dave Farley-style pipeline:
+#   commit-*    fast feedback (<5min)
+#   image       build candidate Docker image, tag with git sha
+#   acceptance  spin up stack, run E2E
+#   promote     retag candidate as :latest if acceptance passed (main only)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GO_VERSION: "1.26"
+  NODE_VERSION: "20"
+  IMAGE_NAME: ghcr.io/klabast/audiotheque
+
+jobs:
+  # ---------------------------- Commit stage ----------------------------
+
+  commit-server:
+    name: Commit / Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: server/go.sum
+      - run: make lint-server unit-server
+      - run: make build-server
+      - uses: actions/upload-artifact@v7
+        with:
+          name: audiod-binary
+          path: server/audiod
+          retention-days: 3
+
+  commit-ui:
+    name: Commit / UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: go install github.com/swaggo/swag/cmd/swag@latest
+      - name: Add Go bin to PATH
+        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+      - run: cd ui && npm ci
+      # Single make invocation so generate-api runs once across all targets.
+      - run: make lint-ui check-ui unit-ui build-ui
+      # Hand the generated swagger spec + TS client to the image stage so
+      # it can skip swag, npm ci, and openapi-generator-cli on the runner.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: audiod-api-generated
+          path: |
+            server/api/spec/swagger.yaml
+            ui/src/lib/api/generated/
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: audiod-ui-build
+          path: ui/build
+          retention-days: 3
+
+  # ---------------------------- Image stage -----------------------------
+
+  image:
+    name: Build candidate image
+    needs: [commit-server, commit-ui]
+    # Only run on main pushes. Acceptance/E2E (which is the only consumer
+    # of the candidate image) is also main-only — for PR builds we trust
+    # the commit-stage (unit tests + lint + build) and accept that a
+    # broken main needs a fast revert ("stop the line"). This trades CI
+    # cost for a slightly less-clean main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      sha-tag: ${{ steps.meta.outputs.sha-tag }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # The Dockerfile expects the generated swagger spec and TS client
+      # in the build context. commit-ui already produced them — pull
+      # them in instead of re-running swag + npm ci + openapi-generator.
+      - uses: actions/download-artifact@v8
+        with:
+          name: audiod-api-generated
+          path: .
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        run: echo "sha-tag=sha-$(echo ${{ github.sha }} | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # Build once, push directly. The job only runs on main, so the
+      # build → tarball → docker-load dance from the PR-build flow is
+      # no longer needed — acceptance can just pull from GHCR.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha-tag }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.sha-tag }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=audiod
+          cache-to: type=gha,mode=max,scope=audiod
+
+  # -------------------------- Acceptance stage --------------------------
+
+  acceptance:
+    name: Acceptance / E2E
+    needs: [image]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [desktop, tablet, mobile]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pull the candidate image just published by the image job and
+      # override docker-compose.test.yml's `build:` with the tagged
+      # version. For test-mpd, ALWAYS build from this commit's source:
+      # the published :latest tag is only refreshed by
+      # test-mpd-image.yml on main pushes that touch tools/test-mpd, so
+      # it goes stale on any commit that changes test-mpd code.
+      - name: Pull candidate images
+        run: |
+          docker pull ${{ env.IMAGE_NAME }}:${{ needs.image.outputs.sha-tag }}
+          docker tag ${{ env.IMAGE_NAME }}:${{ needs.image.outputs.sha-tag }} audiotheque-audiod:latest
+          docker compose -f docker-compose.test.yml build test-mpd
+
+      - name: Start stack
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Install Playwright browsers
+        run: cd e2e && npm ci && npx playwright install --with-deps chromium
+
+      - name: Run E2E (${{ matrix.device }})
+        run: cd e2e && CI_MODE=true DEVICE=${{ matrix.device }} npx cucumber-js --tags '@${{ matrix.device }} or not (@mobile or @tablet or @desktop)'
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-trace-${{ matrix.device }}
+          path: e2e/reports/
+          retention-days: 7
+
+  # ----------------------------- Promote --------------------------------
+
+  promote:
+    name: Promote candidate → latest
+    needs: [image, acceptance]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retag candidate as :latest
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.IMAGE_NAME }}:latest \
+            ${{ env.IMAGE_NAME }}:${{ needs.image.outputs.sha-tag }}

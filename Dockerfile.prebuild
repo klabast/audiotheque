@@ -1,0 +1,61 @@
+# Dockerfile.prebuild - Base images with all dependencies pre-installed
+# This creates two images:
+# 1. audiod-base:builder - Ubuntu/Debian-based for building/testing with Go and FFmpeg
+# 2. audiod-base:runtime - Alpine-based for minimal runtime deployment
+
+# Ubuntu-based builder image with Go and FFmpeg (minimal install)
+FROM golang:1.26-trixie AS audiod-builder
+
+# Install FFmpeg without GUI dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    git \
+    ca-certificates \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-download commonly used Go modules to speed up builds
+WORKDIR /tmp/prebuild
+RUN go mod init prebuild && \
+    go get modernc.org/sqlite@latest && \
+    go get github.com/pressly/goose/v3@latest && \
+    go get github.com/olahol/melody@latest && \
+    go get github.com/hashicorp/mdns@latest && \
+    rm -rf /tmp/prebuild
+
+# Install swag for OpenAPI spec generation
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+# Keep module cache but clean build cache to save space
+RUN go clean -cache
+
+# Verify FFmpeg installation
+RUN ffmpeg -version && ffprobe -version
+
+LABEL org.opencontainers.image.source="https://github.com/klabast/audiotheque"
+LABEL org.opencontainers.image.description="Audiotheque builder image with Go and FFmpeg"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
+# Alpine-based runtime image - minimal size for deployment
+FROM alpine:3.23 AS audiod-runtime
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    ca-certificates \
+    tzdata \
+    # Audio format support
+    lame \
+    opus-tools \
+    flac
+
+# Set up UTF-8 locale
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Verify FFmpeg installation
+RUN ffmpeg -version && ffprobe -version
+
+LABEL org.opencontainers.image.source="https://github.com/klabast/audiotheque"
+LABEL org.opencontainers.image.description="Audiotheque runtime image with FFmpeg"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"

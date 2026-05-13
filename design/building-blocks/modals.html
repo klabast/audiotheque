@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Modals - Audiotheque Building Blocks</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script type="module" src="/src/main.ts"></script>
+	<style>
+		/* Demo modal styles - these will become shortcuts */
+		.demo-modal-overlay {
+			position: fixed;
+			inset: 0;
+			z-index: 50;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 1rem;
+		}
+		.demo-modal-backdrop {
+			position: absolute;
+			inset: 0;
+			background-color: rgba(0, 0, 0, 0.5);
+		}
+		.demo-modal-content {
+			position: relative;
+			background-color: var(--color-surface);
+			border-radius: 0.5rem;
+			padding: 1.5rem;
+			max-width: 28rem;
+			width: 100%;
+			box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+		}
+		.demo-modal-content-lg {
+			max-width: 36rem;
+		}
+		/* For demo purposes - make modals inline */
+		.inline-demo {
+			position: relative;
+			height: 300px;
+			overflow: hidden;
+			border-radius: 0.5rem;
+		}
+		.inline-demo .demo-modal-overlay {
+			position: absolute;
+		}
+	</style>
+</head>
+<body class="min-h-screen">
+	<div class="max-w-4xl mx-auto px-6 py-8">
+		<!-- Header -->
+		<header class="flex items-center justify-between mb-8 pb-6 border-b border-border">
+			<div class="flex items-center gap-4">
+				<a href="/" class="text-text-secondary hover:text-text-primary transition-colors">
+					<div class="i-lucide-arrow-left w-5 h-5"></div>
+				</a>
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider">Building Blocks</div>
+					<h1 class="text-2xl font-bold">Modals</h1>
+				</div>
+			</div>
+			<button id="theme-toggle" class="btn btn-secondary flex items-center gap-2">
+				<svg id="theme-icon-light" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="12" cy="12" r="5"/>
+					<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+				</svg>
+				<svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				</svg>
+				<span id="theme-label">Light</span>
+			</button>
+		</header>
+
+		<!-- Modal Structure -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Modal Structure</h2>
+			<p class="text-sm text-text-secondary mb-4">Modals have three parts: overlay (container), backdrop (darkened background), and content (the dialog).</p>
+			<div class="p-6 bg-surface rounded-lg">
+				<div class="inline-demo bg-background">
+					<div class="demo-modal-overlay">
+						<div class="demo-modal-backdrop"></div>
+						<div class="demo-modal-content">
+							<h3 class="text-xl font-bold mb-2">Modal Title</h3>
+							<p class="text-text-secondary mb-4">Modal content goes here. The backdrop closes the modal when clicked.</p>
+							<div class="flex justify-end gap-3">
+								<button class="btn btn-ghost">Cancel</button>
+								<button class="btn btn-primary">Confirm</button>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="mt-4 space-y-2 text-sm font-mono text-text-muted">
+					<div>modal-overlay - fixed inset-0 z-50 flex items-center justify-center p-4</div>
+					<div>modal-backdrop - absolute inset-0 bg-black/50</div>
+					<div>modal-content - relative bg-surface rounded-lg p-6 max-w-md w-full shadow-2xl</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Modal Sizes -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Modal Sizes</h2>
+			<div class="p-6 bg-surface rounded-lg space-y-6">
+				<!-- Default -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Default (max-w-md / 448px)</div>
+					<div class="bg-surface-alt rounded-lg p-6 max-w-md border border-border">
+						<h3 class="text-xl font-bold mb-2">Confirm Action</h3>
+						<p class="text-text-secondary mb-4">Are you sure you want to proceed?</p>
+						<div class="flex justify-end gap-3">
+							<button class="btn btn-ghost">Cancel</button>
+							<button class="btn btn-primary">Confirm</button>
+						</div>
+					</div>
+					<div class="text-xs text-text-muted font-mono mt-2">modal-content</div>
+				</div>
+
+				<!-- Large -->
+				<div>
+					<div class="text-xs text-text-muted uppercase tracking-wider mb-3">Large (max-w-lg / 512px)</div>
+					<div class="bg-surface-alt rounded-lg p-6 max-w-lg border border-border">
+						<h3 class="text-xl font-bold mb-2">Edit Library</h3>
+						<p class="text-text-secondary mb-4">Update the library settings below.</p>
+						<div class="space-y-4 mb-4">
+							<div>
+								<label class="text-sm font-medium text-text-secondary block mb-2">Library Name</label>
+								<input type="text" value="My Music" class="w-full rounded-lg border border-border bg-surface px-4 py-3 text-text-primary">
+							</div>
+							<div>
+								<label class="text-sm font-medium text-text-secondary block mb-2">Path</label>
+								<input type="text" value="/media/music" class="w-full rounded-lg border border-border bg-surface px-4 py-3 text-text-primary">
+							</div>
+						</div>
+						<div class="flex justify-end gap-3">
+							<button class="btn btn-ghost">Cancel</button>
+							<button class="btn btn-primary">Save</button>
+						</div>
+					</div>
+					<div class="text-xs text-text-muted font-mono mt-2">modal-content-lg</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Destructive Modal -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Destructive Modal</h2>
+			<p class="text-sm text-text-secondary mb-4">For delete confirmations, use error color on the confirm button.</p>
+			<div class="p-6 bg-surface rounded-lg">
+				<div class="bg-surface-alt rounded-lg p-6 max-w-md border border-border">
+					<h3 class="text-xl font-bold mb-2">Delete Library</h3>
+					<p class="text-text-secondary mb-4">This action cannot be undone.</p>
+					<div class="mb-4">
+						<label class="text-sm font-medium text-text-secondary block mb-2">
+							Type <span class="text-error font-semibold">My Music</span> to confirm:
+						</label>
+						<input type="text" placeholder="My Music" class="w-full rounded-lg border border-border bg-surface px-4 py-3 text-text-primary">
+					</div>
+					<div class="flex justify-end gap-3">
+						<button class="btn btn-ghost">Cancel</button>
+						<button class="px-4 py-3 font-medium rounded-lg bg-error text-white hover:bg-error/80">Delete</button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Specifications -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Specifications</h2>
+			<div class="space-y-3">
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Backdrop</div>
+					<div class="text-sm text-text-secondary">black at 50% opacity</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Z-Index</div>
+					<div class="text-sm text-text-secondary">50</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Content Padding</div>
+					<div class="text-sm text-text-secondary">24px (p-6)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Border Radius</div>
+					<div class="text-sm text-text-secondary">8px (rounded-lg)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Default Width</div>
+					<div class="text-sm text-text-secondary">max-w-md (448px)</div>
+				</div>
+				<div class="p-4 bg-surface rounded-lg flex items-center justify-between">
+					<div class="text-sm font-medium">Large Width</div>
+					<div class="text-sm text-text-secondary">max-w-lg (512px)</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Quick Reference -->
+		<section class="mb-10">
+			<h2 class="text-lg font-semibold text-text-primary mb-4">Quick Reference</h2>
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-border">
+							<th class="text-left py-3 px-4 font-semibold">Class</th>
+							<th class="text-left py-3 px-4 font-semibold">Description</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border">
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">modal-overlay</td>
+							<td class="py-3 px-4 text-text-secondary">Fixed container, centers content</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">modal-backdrop</td>
+							<td class="py-3 px-4 text-text-secondary">Dark overlay, click to close</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">modal-content</td>
+							<td class="py-3 px-4 text-text-secondary">Dialog box (default size)</td>
+						</tr>
+						<tr>
+							<td class="py-3 px-4 font-mono text-xs">modal-content-lg</td>
+							<td class="py-3 px-4 text-text-secondary">Dialog box (large)</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</section>
+	</div>
+</body>
+</html>

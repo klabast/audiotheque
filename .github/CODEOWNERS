@@ -1,0 +1,7 @@
+# Code owners — auto-requested for review on every PR.
+#
+# This is a solo-maintained project today: @klabast owns everything.
+# As contributors take ownership of specific subsystems, replace the
+# wildcard line with per-path entries (e.g. /server/internal/mpd/  @someone).
+
+* @klabast

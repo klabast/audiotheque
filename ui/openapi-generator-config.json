@@ -1,0 +1,16 @@
+{
+	"generatorName": "typescript-fetch",
+	"outputDir": "./src/lib/api/generated",
+	"inputSpec": "../server/api/spec/swagger.json",
+	"additionalProperties": {
+		"npmName": "@audiod/api-client",
+		"supportsES6": true,
+		"typescriptThreePlus": true,
+		"modelPropertyNaming": "camelCase",
+		"enumPropertyNaming": "camelCase",
+		"withInterfaces": true,
+		"withSeparateModelsAndApi": true,
+		"apiPackage": "api",
+		"modelPackage": "models"
+	}
+}
