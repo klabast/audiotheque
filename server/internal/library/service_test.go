@@ -374,6 +374,19 @@ func (m *mockRepository) ResetOrphanedJobs(timeout time.Duration) (int64, error)
 	return count, nil
 }
 
+func (m *mockRepository) ResetAllRunningJobs() (int64, error) {
+	var count int64
+	for _, job := range m.scanJobs {
+		if job.Status == "running" {
+			job.Status = "pending"
+			job.StartedAt = nil
+			job.UpdatedAt = time.Now()
+			count++
+		}
+	}
+	return count, nil
+}
+
 // TestListLibraries tests that a user can list their accessible libraries
 func TestListLibraries(t *testing.T) {
 	// Arrange
@@ -644,6 +657,58 @@ func TestGetScanProgress_ReturnsProgress(t *testing.T) {
 
 	if progress.LibraryID != libraryID {
 		t.Errorf("Expected libraryID %d, got %d", libraryID, progress.LibraryID)
+	}
+}
+
+// TestService_StartScan_AfterOrphanReset_QueuesNewJob documents the user-path
+// fix for bug 1 (409 Conflict after container restart):
+//
+//   1. Before the fix, a stale 'running' scan_queue row with a fresh heartbeat
+//      caused StartScan to keep returning ErrScanAlreadyInProgress.
+//   2. The worker's boot-time reset (ResetAllRunningJobs) clears the row to
+//      'pending'.
+//   3. The worker then picks up the pending row and either completes the scan
+//      or — once the user re-queues — a new row is queued.
+//
+// This test walks through that sequence at the service layer.
+func TestService_StartScan_AfterOrphanReset_QueuesNewJob(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo)
+	const libraryID = int64(1)
+
+	// Pre-restart state: a 'running' row left over from a dead worker. Heartbeat
+	// is fresh, so a timeout-based reset would NOT clear it.
+	repo.scanJobs[libraryID] = &ScanJob{
+		ID:        100,
+		LibraryID: libraryID,
+		Status:    "running",
+		UpdatedAt: time.Now(),
+	}
+	repo.nextJobID = 101
+
+	// Reproduces the original bug.
+	if err := service.StartScan(libraryID); err != ErrScanAlreadyInProgress {
+		t.Fatalf("precondition: expected ErrScanAlreadyInProgress, got %v", err)
+	}
+
+	// Worker boots: every 'running' row is unconditionally reset to 'pending'.
+	n, err := repo.ResetAllRunningJobs()
+	if err != nil {
+		t.Fatalf("ResetAllRunningJobs: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("reset count: want 1, got %d", n)
+	}
+
+	// Worker then picks up the pending job and completes it (DeleteScanJob on
+	// completion). We simulate that final step here.
+	if err := repo.DeleteScanJob(100); err != nil {
+		t.Fatalf("DeleteScanJob: %v", err)
+	}
+
+	// User clicks scan again — must succeed now that the stale row is gone.
+	if err := service.StartScan(libraryID); err != nil {
+		t.Fatalf("StartScan after orphan reset + worker completion: %v", err)
 	}
 }
 

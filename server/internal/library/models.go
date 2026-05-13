@@ -237,6 +237,10 @@ type Repository interface {
 	UpdateScanJob(job *ScanJob) error
 	DeleteScanJob(jobID int64) error
 	ResetOrphanedJobs(timeout time.Duration) (int64, error)
+	// ResetAllRunningJobs unconditionally resets every row with status='running'
+	// to 'pending'. Used at worker boot: by definition no worker process is
+	// running yet, so any 'running' row is stale regardless of heartbeat.
+	ResetAllRunningJobs() (int64, error)
 }
 
 // Domain errors

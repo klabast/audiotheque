@@ -15,18 +15,22 @@ import (
 const (
 	// OrphanTimeout is how long a job can go without updates before being considered orphaned
 	OrphanTimeout = 2 * time.Minute
+	// MaintenanceInterval is how often the worker sweeps for in-process orphans
+	// (running jobs whose heartbeat has gone stale while the worker is still up).
+	MaintenanceInterval = 30 * time.Second
 	// ShutdownTimeout is how long to wait for current job to finish during shutdown
 	ShutdownTimeout = 30 * time.Second
 )
 
 // Worker is a background worker that processes scan jobs from the queue
 type Worker struct {
-	hub      *websocket.Hub
-	repo     library.Repository
-	dataDir  string
-	interval time.Duration
-	stop     chan struct{}
-	wg       sync.WaitGroup // tracks running job for graceful shutdown
+	hub                 *websocket.Hub
+	repo                library.Repository
+	dataDir             string
+	interval            time.Duration
+	maintenanceInterval time.Duration
+	stop                chan struct{}
+	wg                  sync.WaitGroup // tracks running job for graceful shutdown
 
 	// Progress throttling (per-library)
 	lastBroadcast map[int64]time.Time
@@ -35,19 +39,23 @@ type Worker struct {
 // NewWorker creates a new scanner worker
 func NewWorker(repo library.Repository, hub *websocket.Hub) *Worker {
 	return &Worker{
-		hub:           hub,
-		repo:          repo,
-		dataDir:       config.GetDataDir(),
-		interval:      2 * time.Second,
-		stop:          make(chan struct{}),
-		lastBroadcast: make(map[int64]time.Time),
+		hub:                 hub,
+		repo:                repo,
+		dataDir:             config.GetDataDir(),
+		interval:            2 * time.Second,
+		maintenanceInterval: MaintenanceInterval,
+		stop:                make(chan struct{}),
+		lastBroadcast:       make(map[int64]time.Time),
 	}
 }
 
 // Start begins the background worker loop
 func (w *Worker) Start() {
-	// Reset any orphaned jobs from previous crash/restart
-	w.resetOrphanedJobs()
+	// On boot, every 'running' row is stale by definition — the previous worker
+	// process is gone. Reset them unconditionally so a fresh scan can be queued
+	// after a container restart. (The timeout-based ResetOrphanedJobs is run
+	// periodically in the loop to catch in-process orphans, not boot-time ones.)
+	w.resetAllRunningJobs()
 
 	go w.run()
 	log.Println("Scanner worker started")
@@ -73,7 +81,22 @@ func (w *Worker) Stop() {
 	log.Println("Scanner worker stopped")
 }
 
-// resetOrphanedJobs resets any "running" jobs that weren't updated recently
+// resetAllRunningJobs unconditionally clears every 'running' row to 'pending'.
+// Called once at worker boot.
+func (w *Worker) resetAllRunningJobs() {
+	count, err := w.repo.ResetAllRunningJobs()
+	if err != nil {
+		log.Printf("Error resetting running jobs at boot: %v", err)
+		return
+	}
+	if count > 0 {
+		log.Printf("Reset %d stale running scan job(s) at boot", count)
+	}
+}
+
+// resetOrphanedJobs resets any "running" jobs that weren't updated within
+// OrphanTimeout. Called periodically by run() to handle in-process orphans
+// (stuck goroutines whose heartbeat has stopped while the worker is still up).
 func (w *Worker) resetOrphanedJobs() {
 	count, err := w.repo.ResetOrphanedJobs(OrphanTimeout)
 	if err != nil {
@@ -90,6 +113,9 @@ func (w *Worker) run() {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
+	maintTicker := time.NewTicker(w.maintenanceInterval)
+	defer maintTicker.Stop()
+
 	// Process any pending jobs immediately on startup
 	w.processPendingScans()
 
@@ -97,6 +123,8 @@ func (w *Worker) run() {
 		select {
 		case <-ticker.C:
 			w.processPendingScans()
+		case <-maintTicker.C:
+			w.resetOrphanedJobs()
 		case <-w.stop:
 			return
 		}
