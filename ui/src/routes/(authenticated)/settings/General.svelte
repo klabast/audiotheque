@@ -8,6 +8,7 @@
 
 	let selectedTheme = $state(themeStore.current);
 	let selectedLanguage = $state('en');
+	let initialLanguage = $state('en');
 	let isLoading = $state(false);
 	let success = $state(false);
 
@@ -20,7 +21,9 @@
 			if (langCookie) {
 				const lang = langCookie.split('=')[1].trim();
 				// Map "de-de" to "de" for the select
-				selectedLanguage = lang.startsWith('de') ? 'de' : 'en';
+				const detected = lang.startsWith('de') ? 'de' : 'en';
+				selectedLanguage = detected;
+				initialLanguage = detected;
 			}
 		}
 	});
@@ -44,12 +47,17 @@
 			// Save theme to store (persists to localStorage)
 			themeStore.setTheme(selectedTheme as 'light' | 'dark' | 'system');
 
-			// Save language to cookie for paraglide
+			// Save language to cookie for paraglide. Only reload if the
+			// language actually changed — reloading on every save reruns
+			// the FOUC pre-hydration script and is visible as a flicker
+			// even when only the theme moved.
 			if (browser) {
 				const langTag = selectedLanguage === 'de' ? 'de-de' : 'en';
 				document.cookie = `PARAGLIDE_LOCALE=${langTag}; path=/; max-age=34560000`;
-				// Reload to apply language change
-				window.location.reload();
+				if (selectedLanguage !== initialLanguage) {
+					window.location.reload();
+					return;
+				}
 			}
 
 			success = true;
