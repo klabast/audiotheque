@@ -15,11 +15,13 @@ services:
       - /path/to/your/music:/app/music:delegated
       - ./server/data:/app/data
     environment:
-      - MUSIC_LIBRARY_PATH=/app/music
-      # Manual MPD hosts (comma-separated). Replace with your own.
-      - MPD_HOSTS=mpd-host:6600
-      # Enable/disable mDNS discovery (default: enabled)
-      - ENABLE_MDNS_DISCOVERY=true
-      # Public URL for MPD streaming (set this to your server's reachable IP:port)
-      # - AUDIOD_PUBLIC_URL=192.168.1.100:8080
+      # All env vars use the audiod daemon prefix (internal name).
+      # MPD hosts + mDNS discovery are configured in the UI, not here.
+      - AUDIOD_PORT=8080
+      - AUDIOD_DATA_DIR=/app/data
+      # Uncomment + tighten if exposing beyond localhost:
+      # - AUDIOD_ALLOWED_ORIGINS=https://music.example.com
+      # Pin to a known value to keep sessions valid across restarts
+      # (otherwise audiod generates a fresh one each boot):
+      # - JWT_SECRET=change-me
     restart: unless-stopped
