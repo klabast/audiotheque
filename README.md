@@ -21,7 +21,11 @@
 
 ## Screenshots
 
-_Coming soon — drop PNGs into [`docs/screenshots/`](docs/screenshots/) and they'll be linked from here._
+![Library view with playback on a remote MPD device](docs/screenshots/library.png)
+
+_Library view, dark theme. Playback footer shows the current track streaming
+to the "Wohnzimmer" MPD speaker — the seek position ticks live as the server
+polls MPD and pushes state over WebSocket to every connected tab._
 
 ## Quick start (Docker)
 
