@@ -156,6 +156,85 @@ func TestDBSessionRepository_GetMissing(t *testing.T) {
 	}
 }
 
+// Regression: orphan-session cleanup must actually remove rows.
+//
+// When a browser tab's WebSocket reconnects it gets a fresh clientID, while
+// the persisted session still names the previous (now-dead) clientID as its
+// device. The next GetSession call detects the stale row and asks the
+// repository to delete it. If that delete is a silent no-op, the next tab
+// loads with `session.deviceId` still pointing at the dead clientID — the
+// frontend then mislabels the session as a "Remote device" and pauses
+// playback. Treat the delete as a behavioural contract, not a fire-and-
+// forget.
+func TestDBSessionRepository_DeleteRemovesRow(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewDBSessionRepository(db)
+
+	if err := repo.Save(&Session{
+		UserID:  42,
+		State:   StatePlaying,
+		Current: &CurrentTrack{TrackID: 1, Position: 0},
+		Source:  Source{Type: SourceTypeAlbum, ID: 100, Remaining: []int64{}},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := repo.Delete(42); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	got, err := repo.GetByUserID(42)
+	if err != nil {
+		t.Fatalf("GetByUserID: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("session still present after Delete: %+v", got)
+	}
+}
+
+// Regression: startup migration must clear empty-device rows.
+//
+// `cmd/server/commands/server.go` invokes DeleteWithoutDevice on boot to
+// purge pre-invariant rows. A silent SQL failure here means stale rows
+// survive every restart and re-trigger the orphaned-session symptom.
+func TestDBSessionRepository_DeleteWithoutDeviceRemovesRows(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewDBSessionRepository(db)
+
+	// One row with no device (target of the sweep), one with a device.
+	if err := repo.Save(&Session{
+		UserID:  1,
+		State:   StateStopped,
+		Source:  Source{Type: SourceTypeAlbum, ID: 1, Remaining: []int64{}},
+	}); err != nil {
+		t.Fatalf("Save deviceless: %v", err)
+	}
+	if err := repo.Save(&Session{
+		UserID:   2,
+		State:    StatePlaying,
+		Current:  &CurrentTrack{TrackID: 1, Position: 0},
+		Source:   Source{Type: SourceTypeAlbum, ID: 1, Remaining: []int64{}},
+		DeviceID: "c1",
+	}); err != nil {
+		t.Fatalf("Save with device: %v", err)
+	}
+
+	n, err := repo.DeleteWithoutDevice()
+	if err != nil {
+		t.Fatalf("DeleteWithoutDevice: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("rows removed = %d, want 1", n)
+	}
+
+	if got, _ := repo.GetByUserID(1); got != nil {
+		t.Errorf("deviceless row should be gone, got %+v", got)
+	}
+	if got, _ := repo.GetByUserID(2); got == nil {
+		t.Error("row with device should survive the sweep")
+	}
+}
+
 // The whole point of persistence: state survives a server restart.
 // We simulate "restart" by closing the repo's view of the DB and reopening.
 func TestDBSessionRepository_SurvivesRestart(t *testing.T) {

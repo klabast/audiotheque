@@ -6,9 +6,40 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+// Keepalive timing knobs, stored as atomic nanosecond counts so tests can
+// override them while background goroutines from previous tests are still
+// reading. Production reads via the get* helpers below.
+//
+// pongWait is the read deadline that ratchets forward each time we see a
+// pong. pingInterval is how often we send a ping; it must be comfortably
+// less than pongWait so a missed pong has time to be detected before the
+// deadline fires. writeWait is a per-write deadline that prevents a stuck
+// peer from blocking the write pump forever.
+//
+// Defaults: 60s pong wait, 54s ping (10% headroom), 10s write — the
+// canonical gorilla/websocket recipe. Anything proxied tends to die
+// somewhere between 60–120s of TCP idle, so 54s gives one reliable ping
+// per minute on the wire.
+var (
+	pingInterval atomic.Int64
+	pongWait     atomic.Int64
+	writeWait    atomic.Int64
+)
+
+func init() {
+	pingInterval.Store(int64(54 * time.Second))
+	pongWait.Store(int64(60 * time.Second))
+	writeWait.Store(int64(10 * time.Second))
+}
+
+func getPingInterval() time.Duration { return time.Duration(pingInterval.Load()) }
+func getPongWait() time.Duration     { return time.Duration(pongWait.Load()) }
+func getWriteWait() time.Duration    { return time.Duration(writeWait.Load()) }
 
 // Message represents a WebSocket message to be broadcast
 type Message struct {
@@ -223,12 +254,28 @@ func (h *Hub) ClientCount() int {
 	return len(h.clients)
 }
 
-// readPump pumps messages from the WebSocket connection to the hub
+// readPump pumps messages from the WebSocket connection to the hub.
+//
+// The read deadline is the keepalive enforcement point: every pong
+// received from the peer ratchets it forward by pongWait. If pings stop
+// being answered (dead intermediary, sleeping laptop, broken NAT) the
+// deadline expires, ReadMessage returns an error, and we unregister.
+// Without this, a TCP connection severed silently upstream would keep
+// the hub believing a client is alive — and orphan its persisted
+// session ID, surfacing in the UI as a phantom "Remote device".
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
+
+	if err := c.conn.SetReadDeadline(time.Now().Add(getPongWait())); err != nil {
+		log.Printf("WebSocket set read deadline: %v", err)
+		return
+	}
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(getPongWait()))
+	})
 
 	for {
 		_, message, err := c.conn.ReadMessage()
@@ -249,17 +296,45 @@ func (c *Client) readPump() {
 	}
 }
 
-// writePump pumps messages from the hub to the WebSocket connection
+// writePump pumps messages from the hub to the WebSocket connection.
+//
+// The ping ticker is the other half of the keepalive: it produces frames
+// on the wire every pingInterval whether or not there is application
+// traffic, which (a) gives the peer something to pong so the read
+// deadline keeps ratcheting and (b) keeps the connection visible to
+// every NAT/proxy/idle-killer between us and the browser.
+//
+// The hub closes c.send to signal unregister; we treat that as "send a
+// close frame and return" so the read pump exits cleanly too.
 func (c *Client) writePump() {
+	ticker := time.NewTicker(getPingInterval())
 	defer func() {
+		ticker.Stop()
 		c.conn.Close()
 	}()
 
-	for message := range c.send {
-		err := c.conn.WriteMessage(websocket.TextMessage, message)
-		if err != nil {
-			log.Printf("WebSocket write error: %v", err)
-			break
+	for {
+		select {
+		case message, ok := <-c.send:
+			if err := c.conn.SetWriteDeadline(time.Now().Add(getWriteWait())); err != nil {
+				return
+			}
+			if !ok {
+				// Hub closed the channel. Best-effort close frame, then exit.
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("WebSocket write error: %v", err)
+				return
+			}
+		case <-ticker.C:
+			if err := c.conn.SetWriteDeadline(time.Now().Add(getWriteWait())); err != nil {
+				return
+			}
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }

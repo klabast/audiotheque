@@ -177,7 +177,7 @@ func (r *DBSessionRepository) GetByUserID(userID int64) (*Session, error) {
 // Delete removes a user's session row. No-op if the row doesn't exist.
 func (r *DBSessionRepository) Delete(userID int64) error {
 	//language=SQL
-	const query = `DELETE FROM playback_sessions WHERE user_id = ?`
+	const query = `DELETE FROM playback_session WHERE user_id = ?`
 	if _, err := r.db.Exec(query, userID); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
@@ -190,7 +190,7 @@ func (r *DBSessionRepository) Delete(userID int64) error {
 // startup migration sweeps them out. Returns the number of rows removed.
 func (r *DBSessionRepository) DeleteWithoutDevice() (int64, error) {
 	//language=SQL
-	const query = `DELETE FROM playback_sessions WHERE device_id = ''`
+	const query = `DELETE FROM playback_session WHERE device_id = ''`
 	res, err := r.db.Exec(query)
 	if err != nil {
 		return 0, fmt.Errorf("delete sessions without device: %w", err)
