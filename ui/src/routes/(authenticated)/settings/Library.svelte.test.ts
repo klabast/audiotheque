@@ -57,6 +57,10 @@ describe('Library Settings Component', () => {
 		vi.clearAllMocks();
 		// The global scan store is a singleton; clear its state between tests.
 		(scan.activeScans as unknown as Map<number, ScanProgressData>).clear();
+		// AppLayout.onMount usually starts it; this unit test renders Library
+		// in isolation, so we wire it up here. Idempotent, so calling per test
+		// is fine — the first call captures the listener in wsCallbacks.
+		scan.start();
 	});
 
 	it('should render library settings title', () => {

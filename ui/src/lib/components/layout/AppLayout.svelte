@@ -1,16 +1,29 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { onMount } from 'svelte';
 	import TopBar from './TopBar.svelte';
 	import LeftDrawer from './LeftDrawer.svelte';
 	import RightSidebar from './RightSidebar.svelte';
 	import PlayFooter from './PlayFooter.svelte';
 	import QueuePanel from '$lib/components/QueuePanel.svelte';
+	import { scan } from '$lib/stores/scan.svelte';
 
 	interface Props {
 		children: Snippet;
 	}
 
 	let { children }: Props = $props();
+
+	// Activate the global scan-progress WebSocket subscription. Done from this
+	// component (rather than at scan store module load) so that PlayFooter —
+	// rendered as our child below — has already registered its own client-id
+	// listener via playback.loadSession() by the time this onMount fires.
+	// Otherwise the WS welcome races PlayFooter's listener registration and
+	// the playback store never learns its client ID — every e2e playback
+	// scenario then times out at waitForClientId.
+	onMount(() => {
+		scan.start();
+	});
 
 	let isLeftDrawerOpen = $state(false);
 	let isRightSidebarOpen = $state(false);
