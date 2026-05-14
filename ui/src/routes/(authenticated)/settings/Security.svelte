@@ -7,6 +7,12 @@
 	import { X } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { APP_NAME } from '$lib/branding';
+	import { auth } from '$lib/stores/auth.svelte';
+
+	// Active Devices is per-user (non-admins see this fine). The Authentication
+	// toggle below is admin-only and hidden for everyone else so we don't
+	// fire the admin-only GET /api/settings/auth.
+	let isAdmin = $derived(auth.user?.isAdmin ?? false);
 
 	let sessions: AuthSessionInfo[] = $state([]);
 	let loading = $state(true);
@@ -40,7 +46,10 @@
 	}
 
 	onMount(async () => {
-		await Promise.all([refresh(), refreshAuthEnabled()]);
+		// Skip the admin-only auth-enabled lookup for non-admins (would 403).
+		const tasks: Array<Promise<unknown>> = [refresh()];
+		if (isAdmin) tasks.push(refreshAuthEnabled());
+		await Promise.all(tasks);
 		loading = false;
 	});
 
@@ -174,28 +183,30 @@
 		<p class="text-text-secondary mt-1 text-sm">{m['settings.security.subtitle']()}</p>
 	</div>
 
-	<div class="card-bordered" data-testid="auth-toggle-section">
-		<h3 class="text-text-primary mb-1 text-lg font-semibold">
-			{m['settings.security.auth_section']()}
-		</h3>
-		<p class="text-text-secondary mb-4 text-sm">
-			{m['settings.security.auth_section_subtitle']({ appName: APP_NAME })}
-		</p>
-		<p class="text-text-primary mb-4 text-sm" data-testid="auth-toggle-status">
-			{authEnabled
-				? m['settings.security.auth_status_enabled']()
-				: m['settings.security.auth_status_disabled']()}
-		</p>
-		{#if authEnabled}
-			<Button data-testid="disable-auth-button" onclick={startDisableAuth} variant="danger">
-				{m['settings.security.disable_login_button']()}
-			</Button>
-		{:else}
-			<Button data-testid="enable-auth-button" onclick={startEnableAuth} variant="primary">
-				{m['settings.security.enable_login_button']()}
-			</Button>
-		{/if}
-	</div>
+	{#if isAdmin}
+		<div class="card-bordered" data-testid="auth-toggle-section">
+			<h3 class="text-text-primary mb-1 text-lg font-semibold">
+				{m['settings.security.auth_section']()}
+			</h3>
+			<p class="text-text-secondary mb-4 text-sm">
+				{m['settings.security.auth_section_subtitle']({ appName: APP_NAME })}
+			</p>
+			<p class="text-text-primary mb-4 text-sm" data-testid="auth-toggle-status">
+				{authEnabled
+					? m['settings.security.auth_status_enabled']()
+					: m['settings.security.auth_status_disabled']()}
+			</p>
+			{#if authEnabled}
+				<Button data-testid="disable-auth-button" onclick={startDisableAuth} variant="danger">
+					{m['settings.security.disable_login_button']()}
+				</Button>
+			{:else}
+				<Button data-testid="enable-auth-button" onclick={startEnableAuth} variant="primary">
+					{m['settings.security.enable_login_button']()}
+				</Button>
+			{/if}
+		</div>
+	{/if}
 
 	<div class="card-bordered">
 		<h3 class="text-text-primary mb-4 text-lg font-semibold">

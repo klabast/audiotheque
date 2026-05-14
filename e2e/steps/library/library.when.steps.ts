@@ -42,7 +42,17 @@ When(
 			await page.locator(`[data-testid="library-path-input-${i}"]`).fill(resolveServerPath(paths[i]));
 		}
 
+		// Wait for the create POST to complete before returning — without this,
+		// a follow-up "User can see library X" can race the response and find
+		// no row in the list. (Manifested as a flake in larger e2e batches.)
+		const createPost = page.waitForResponse(
+			(r) => r.url().includes('/api/libraries') && r.request().method() === 'POST',
+			{ timeout: 10000 }
+		);
 		await page.locator('[data-testid="save-library-button"]').click();
+		await createPost.catch(() => {
+			// Surfaced by the following Then assertion if it never fires.
+		});
 
 		this.createdLibraryName = libraryName;
 	}

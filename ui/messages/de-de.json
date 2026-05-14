@@ -113,6 +113,8 @@
 	"playback.select_device": "Gerät auswählen",
 	"playback.stop": "Stoppen",
 	"playback.this_device": "Dieses Gerät",
+	"settings.admin_required_title": "Administratorrechte erforderlich",
+	"settings.admin_required_body": "Dieser Bereich ist nur für Administratoren zugänglich. Bitte einen Admin um die Rolle oder melde dich als Admin an.",
 	"settings.account.change_password_section": "Passwort ändern",
 	"settings.account.error": "Passwort konnte nicht geändert werden",
 	"settings.account.subtitle": "Verwalten Sie Ihre Kontosicherheit und Einstellungen",

@@ -76,6 +76,7 @@ Given(
 		this.currentPassword = password;
 		this.adminUser = username;
 		this.adminPassword = password;
+		this.userPasswords.set(username, password);
 	}
 );
 
@@ -85,6 +86,7 @@ Given(
 		createUser(username, password, false);
 		this.currentUser = username;
 		this.currentPassword = password;
+		this.userPasswords.set(username, password);
 	}
 );
 
@@ -96,7 +98,11 @@ Given('User is on login page', async function (this: AudiodWorld) {
 
 Given('User {string} is logged in', async function (this: AudiodWorld, username: string) {
 	const page = this.getPage();
-	const password = this.currentPassword || 'alicepass123';
+	// Prefer the per-user password map so scenarios that switch accounts
+	// resolve the right credential by name; fall back to currentPassword
+	// (the original single-user behaviour) and finally a hardcoded default.
+	const password =
+		this.userPasswords.get(username) || this.currentPassword || 'alicepass123';
 
 	await page.context().clearCookies();
 
@@ -115,6 +121,7 @@ Given('User {string} is logged in', async function (this: AudiodWorld, username:
 	expect(page.url()).not.toContain('/init');
 
 	this.currentUser = username;
+	this.currentPassword = password;
 });
 
 // Forces the current user's sessions to expire in ~1 minute via the

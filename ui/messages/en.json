@@ -113,6 +113,8 @@
 	"playback.select_device": "Select device",
 	"playback.stop": "Stop",
 	"playback.this_device": "This Device",
+	"settings.admin_required_title": "Admin access required",
+	"settings.admin_required_body": "This section is only available to administrators. Ask an admin to grant you the role, or sign in as one.",
 	"settings.account.change_password_section": "Change Password",
 	"settings.account.error": "Failed to change password",
 	"settings.account.subtitle": "Manage your account security and preferences",

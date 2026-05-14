@@ -43,6 +43,12 @@ export class AudiodWorld extends World {
   extraContexts: Map<string, BrowserContext> = new Map();
   extraPages: Map<string, Page> = new Map();
 
+  // Per-username password lookup. `currentPassword` tracks "whoever was last
+  // mentioned"; this map keeps every user's password so scenarios that switch
+  // accounts (log out as alice, log in as bob, log out, log in as alice
+  // again) can resolve the right credential by name.
+  userPasswords: Map<string, string> = new Map();
+
   // Snapshot fields scenarios use to compare "before vs after" state.
   // Keeping them on the world avoids leaking module state between scenarios.
   preActionTrackId?: number;
