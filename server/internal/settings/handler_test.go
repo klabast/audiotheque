@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,21 +37,37 @@ func (m *mockAuthRepository) DeleteResetCode(string) error        { return nil }
 func (m *mockAuthRepository) DeleteExpiredResetCodes() error      { return nil }
 func (m *mockAuthRepository) DeleteResetCodesByUserID(int64) error { return nil }
 
+// testSessionRepo is shared between createTestAuthService and addAuthCookie
+// so the handler's session lookup finds the row addAuthCookie inserted.
+var testSessionRepo auth.SessionRepository
+
 func createTestAuthService() *auth.Service {
 	repo := &mockAuthRepository{
 		users: map[int64]*auth.User{
 			1: {ID: 1, Username: "admin", IsAdmin: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 		},
 	}
-	return auth.NewService(repo)
+	testSessionRepo = auth.NewInMemorySessionRepository()
+	return auth.NewService(repo, testSessionRepo)
 }
 
 func addAuthCookie(req *http.Request, userID int64) error {
-	token, err := auth.GenerateToken(userID, "admin")
+	if testSessionRepo == nil {
+		testSessionRepo = auth.NewInMemorySessionRepository()
+	}
+	id := fmt.Sprintf("test-session-%d-%d", userID, time.Now().UnixNano())
+	now := time.Now()
+	err := testSessionRepo.Create(&auth.Session{
+		ID:         id,
+		UserID:     userID,
+		CreatedAt:  now,
+		LastSeenAt: now,
+		ExpiresAt:  now.Add(time.Hour),
+	})
 	if err != nil {
 		return err
 	}
-	req.AddCookie(&http.Cookie{Name: "audiod_token", Value: token})
+	req.AddCookie(&http.Cookie{Name: "audiod_token", Value: id})
 	return nil
 }
 

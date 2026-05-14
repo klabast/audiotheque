@@ -83,3 +83,29 @@ Given('User is logged out', async function (this: AudiodWorld) {
 	this.currentUser = undefined;
 	this.currentPassword = undefined;
 });
+
+// Plants a known-garbage session cookie before any navigation, simulating
+// either a pre-rename JWT cookie hanging around in a browser or a session
+// row that has been deleted server-side. The server should reject the
+// cookie (no row matches) and the app should land on /login.
+Given(
+	'User has a stale session cookie for {string}',
+	async function (this: AudiodWorld, username: string) {
+		const page = this.getPage();
+		// Cookies on `localhost` are visible to both :5180 (Vite) and :8880
+		// (audiod) because cookies ignore port — dev mode runs both there,
+		// CI mode runs everything on localhost too.
+		await page.context().addCookies([
+			{
+				name: 'audiod_token',
+				value: `stale-session-for-${username}-${Date.now()}`,
+				domain: 'localhost',
+				path: '/',
+				httpOnly: true,
+				secure: false,
+				sameSite: 'Lax'
+			}
+		]);
+		this.currentUser = undefined;
+	}
+);

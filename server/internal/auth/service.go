@@ -32,16 +32,48 @@ type Repository interface {
 
 // Service handles authentication business logic
 type Service struct {
-	repo Repository
+	repo     Repository
+	sessions SessionRepository
 }
 
-// NewService creates a new auth service
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+// NewService creates a new auth service. The session repository may be nil
+// only when sessions are not needed (e.g. CLI commands that don't issue
+// cookies) — every HTTP path that authenticates a browser request must
+// construct the Service with a real SessionRepository.
+func NewService(repo Repository, sessions SessionRepository) *Service {
+	return &Service{repo: repo, sessions: sessions}
 }
 
-// Login validates credentials and returns a JWT token and user
-func (s *Service) Login(username, password string) (string, *User, error) {
+// SessionContext carries the request metadata recorded on a new session.
+// All fields are optional — empty strings are stored as empty strings.
+type SessionContext struct {
+	RememberMe bool
+	UserAgent  string
+	IP         string
+}
+
+// Authenticate verifies credentials and returns the user without creating
+// a session. CLI commands and other non-HTTP paths use this to gate admin
+// operations on a username/password without writing a cookie-backed session.
+func (s *Service) Authenticate(username, password string) (*User, error) {
+	user, err := s.repo.GetByUsername(username)
+	if err != nil {
+		return nil, ErrInvalidPassword
+	}
+	valid, err := VerifyPassword(password, user.PasswordHash)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, ErrInvalidPassword
+	}
+	return user, nil
+}
+
+// Login validates credentials and returns an opaque session ID (cookie value)
+// plus the authenticated user. The session row is persisted; logout/revoke
+// drops it.
+func (s *Service) Login(username, password string, ctx SessionContext) (string, *User, error) {
 	// Get user from repository
 	user, err := s.repo.GetByUsername(username)
 	if err != nil {
@@ -58,13 +90,85 @@ func (s *Service) Login(username, password string) (string, *User, error) {
 		return "", nil, ErrInvalidPassword
 	}
 
-	// Generate JWT token
-	token, err := GenerateToken(user.ID, user.Username)
+	// Open a session for this login
+	sessionID, err := s.CreateSession(user.ID, ctx)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return token, user, nil
+	return sessionID, user, nil
+}
+
+// CreateSession inserts a new session row for userID and returns the cookie
+// value (the row's opaque id). Window is 30d by default, 90d when
+// RememberMe is set — see SessionWindowDefault / SessionWindowRemember.
+func (s *Service) CreateSession(userID int64, ctx SessionContext) (string, error) {
+	id, err := generateSessionID()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC()
+	window := SessionWindowDefault
+	if ctx.RememberMe {
+		window = SessionWindowRemember
+	}
+	sess := &Session{
+		ID:         id,
+		UserID:     userID,
+		CreatedAt:  now,
+		LastSeenAt: now,
+		ExpiresAt:  now.Add(window),
+		RememberMe: ctx.RememberMe,
+		UserAgent:  ctx.UserAgent,
+		LastIP:     ctx.IP,
+	}
+	if err := s.sessions.Create(sess); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// ValidateSession resolves a cookie value to its user. Returns ErrUnauthorized
+// (via ErrSessionNotFound translated up the stack) for unknown or expired
+// sessions, and lazily deletes the row when expired.
+//
+// This slice does NOT implement sliding renewal — the caller (middleware)
+// gets back the user but expires_at is not bumped. Renewal lands in the
+// follow-up slice that activates the @wip "continued use renews the
+// window" scenario.
+func (s *Service) ValidateSession(id string) (*User, error) {
+	if id == "" {
+		return nil, ErrSessionNotFound
+	}
+	sess, err := s.sessions.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().UTC().After(sess.ExpiresAt) {
+		// Best-effort cleanup; ignore delete errors so we always return the
+		// right auth signal to the caller.
+		_ = s.sessions.Delete(id)
+		return nil, ErrSessionNotFound
+	}
+	user, err := s.repo.GetByID(sess.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// DeleteSession removes a single session row (logout from one device).
+func (s *Service) DeleteSession(id string) error {
+	if id == "" {
+		return nil
+	}
+	return s.sessions.Delete(id)
+}
+
+// CleanupExpiredSessions drops session rows whose expires_at has passed.
+// Intended for the background jobs runner.
+func (s *Service) CleanupExpiredSessions() (int64, error) {
+	return s.sessions.DeleteExpired(time.Now().UTC())
 }
 
 // GetUserByID retrieves a user by ID
@@ -85,9 +189,10 @@ func (s *Service) DoesAdminUserExist() (bool, error) {
 	return count > 0, nil
 }
 
-// CreateFirstUser creates the first user (admin) account
-// Returns an error if users already exist
-func (s *Service) CreateFirstUser(username, password string) (string, *User, error) {
+// CreateFirstUser creates the first user (admin) account and opens a session
+// for them. Returns the session id (cookie value) plus the user.
+// Errors if users already exist.
+func (s *Service) CreateFirstUser(username, password string, ctx SessionContext) (string, *User, error) {
 	// Check if any users exist
 	count, err := s.repo.GetUserCount()
 	if err != nil {
@@ -110,13 +215,13 @@ func (s *Service) CreateFirstUser(username, password string) (string, *User, err
 		return "", nil, err
 	}
 
-	// Generate JWT token for auto-login
-	token, err := GenerateToken(user.ID, user.Username)
+	// Open a session for the freshly-created admin
+	sessionID, err := s.CreateSession(user.ID, ctx)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return token, user, nil
+	return sessionID, user, nil
 }
 
 // CreateUser creates a new user account

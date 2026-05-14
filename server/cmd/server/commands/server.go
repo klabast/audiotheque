@@ -70,9 +70,12 @@ func startServer() error {
 	}
 	defer db.Close()
 
-	// Initialize auth
+	// Initialize auth (with DB-backed session store for browser sessions).
+	// Variable name is "authSessionRepo" to disambiguate from the playback
+	// SessionRepository defined further down — they're separate concerns.
 	authRepo := auth.NewRepository(db)
-	authService := auth.NewService(authRepo)
+	authSessionRepo := auth.NewSessionRepository(db)
+	authService := auth.NewService(authRepo, authSessionRepo)
 	authHandler := auth.NewHandler(authService)
 
 	// Initialize system

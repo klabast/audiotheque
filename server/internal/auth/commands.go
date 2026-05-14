@@ -11,9 +11,10 @@ import (
 // In setup mode (no users exist): --admin flag is required (first user must be admin)
 // In normal mode (users exist): --admin flag is optional (defaults to false)
 func CreateUserCommand(db *sql.DB, username, password string, isAdmin bool) error {
-	// Create service (follows layered architecture)
+	// CLI path: no session needed, pass nil session repo. The CLI only
+	// calls CreateUser, which doesn't touch the session store.
 	repo := NewRepository(db)
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	// Call service layer (business logic handles setup vs normal mode)
 	user, err := service.CreateUser(username, password, isAdmin)

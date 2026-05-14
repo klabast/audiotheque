@@ -11,27 +11,23 @@ var (
 	ErrForbidden    = errors.New("forbidden: admin access required")
 )
 
-// GetAuthenticatedUser extracts and validates the JWT token from the request cookie,
-// then returns the authenticated user.
-// Returns ErrUnauthorized if the token is missing or invalid.
+// GetAuthenticatedUser resolves the audiod_token cookie to a user via the
+// DB-backed session table and returns the user.
+// Returns ErrUnauthorized if the cookie is missing, the session is unknown,
+// expired, or refers to a deleted user.
 func GetAuthenticatedUser(r *http.Request, service *Service) (*User, error) {
-	// Get token from cookie
 	cookie, err := r.Cookie("audiod_token")
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
 
-	// Validate token
-	claims, err := ValidateToken(cookie.Value)
+	user, err := service.ValidateSession(cookie.Value)
 	if err != nil {
-		log.Printf("Invalid token: %v", err)
-		return nil, ErrUnauthorized
-	}
-
-	// Get user from database
-	user, err := service.GetUserByID(claims.UserID)
-	if err != nil {
-		log.Printf("Failed to get user %d: %v", claims.UserID, err)
+		// Unknown/expired sessions are the common case; only log the noisy
+		// ones (e.g. DB errors) and return a clean Unauthorized.
+		if !errors.Is(err, ErrSessionNotFound) {
+			log.Printf("Session validation error: %v", err)
+		}
 		return nil, ErrUnauthorized
 	}
 

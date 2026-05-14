@@ -2,8 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -41,13 +43,67 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	RememberMe bool   `json:"rememberMe"`
 }
 
 type LoginResponse struct {
-	Token             string `json:"token"`
-	User              UserResponse `json:"user"`
+	Token string       `json:"token"`
+	User  UserResponse `json:"user"`
+}
+
+// sessionContextFromRequest captures user-agent + best-effort client IP for
+// recording on the session row. X-Forwarded-For (first hop) wins if present,
+// so reverse-proxied deployments record the real client.
+func sessionContextFromRequest(r *http.Request, rememberMe bool) SessionContext {
+	ip := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		if comma := strings.Index(forwarded, ","); comma >= 0 {
+			ip = strings.TrimSpace(forwarded[:comma])
+		} else {
+			ip = strings.TrimSpace(forwarded)
+		}
+	}
+	return SessionContext{
+		RememberMe: rememberMe,
+		UserAgent:  r.Header.Get("User-Agent"),
+		IP:         ip,
+	}
+}
+
+// setSessionCookie writes the audiod_token cookie with the correct lifetime
+// for the session's RememberMe flag. Centralised so login + setup stay in
+// sync. Secure flag stays false here — auto-detection from request transport
+// lands in a separate slice.
+func setSessionCookie(w http.ResponseWriter, value string, rememberMe bool) {
+	window := SessionWindowDefault
+	if rememberMe {
+		window = SessionWindowRemember
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "audiod_token",
+		Value:    value,
+		Path:     "/",
+		MaxAge:   int(window.Seconds()),
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearSessionCookie expires the audiod_token cookie immediately. Used on
+// logout once the server-side session row has been deleted.
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "audiod_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // HandleLogin handles POST /api/auth/login
@@ -88,27 +144,18 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Attempt login
-	token, user, err := h.service.Login(req.Username, req.Password)
+	// Attempt login — opens a DB-backed session and returns the opaque cookie value.
+	sessionID, user, err := h.service.Login(req.Username, req.Password, sessionContextFromRequest(r, req.RememberMe))
 	if err != nil {
 		log.Printf("Login failed for user %s: %v", req.Username, err)
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
 
-	// Set httpOnly cookie with JWT token
-	http.SetCookie(w, &http.Cookie{
-		Name:     "audiod_token",
-		Value:    token,
-		Path:     "/",
-		MaxAge:   7 * 24 * 60 * 60, // 7 days
-		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, sessionID, req.RememberMe)
 
 	response := LoginResponse{
-		Token: token,
+		Token: sessionID,
 		User:  user.ToResponse(),
 	}
 
@@ -132,16 +179,15 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clear the cookie by setting MaxAge to -1
-	http.SetCookie(w, &http.Cookie{
-		Name:     "audiod_token",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-	})
+	// Delete the server-side session row before clearing the cookie. Missing
+	// or unknown cookies are not an error — logout is idempotent.
+	if cookie, err := r.Cookie("audiod_token"); err == nil {
+		if err := h.service.DeleteSession(cookie.Value); err != nil {
+			log.Printf("Failed to delete session on logout: %v", err)
+		}
+	}
+
+	clearSessionCookie(w)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
@@ -166,25 +212,9 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get token from cookie
-	cookie, err := r.Cookie("audiod_token")
+	// Resolve the session cookie to a user. Unknown / expired → 401.
+	user, err := userFromSessionCookie(r, h.service)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	// Validate token
-	claims, err := ValidateToken(cookie.Value)
-	if err != nil {
-		log.Printf("Invalid token: %v", err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	// Get user from database
-	user, err := h.service.GetUserByID(claims.UserID)
-	if err != nil {
-		log.Printf("Failed to get user %d: %v", claims.UserID, err)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -223,17 +253,9 @@ func (h *Handler) HandleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get token from cookie
-	cookie, err := r.Cookie("audiod_token")
+	// Resolve the session cookie to a user.
+	user, err := userFromSessionCookie(r, h.service)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	// Validate token and get user ID
-	claims, err := ValidateToken(cookie.Value)
-	if err != nil {
-		log.Printf("Invalid token: %v", err)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -257,13 +279,13 @@ func (h *Handler) HandleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update password
-	err = h.service.UpdatePassword(claims.UserID, req.CurrentPassword, req.NewPassword)
+	err = h.service.UpdatePassword(user.ID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		if err == ErrInvalidPassword {
 			http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
 			return
 		}
-		log.Printf("Failed to update password for user %d: %v", claims.UserID, err)
+		log.Printf("Failed to update password for user %d: %v", user.ID, err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
@@ -448,6 +470,27 @@ func (h *Handler) HandleSetupRequired(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// userFromSessionCookie is the single source of truth for "who is the user
+// behind this request" used by /me and PUT /password. The auth middleware
+// uses GetAuthenticatedUser directly; this helper exists so the handler
+// methods that ran their own JWT decode previously can switch without
+// growing duplicate code paths.
+func userFromSessionCookie(r *http.Request, service *Service) (*User, error) {
+	cookie, err := r.Cookie("audiod_token")
+	if err != nil {
+		return nil, ErrUnauthorized
+	}
+	user, err := service.ValidateSession(cookie.Value)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return nil, ErrUnauthorized
+		}
+		log.Printf("Session lookup failed: %v", err)
+		return nil, ErrUnauthorized
+	}
+	return user, nil
+}
+
 type SetupRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -497,8 +540,9 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create first user
-	token, user, err := h.service.CreateFirstUser(req.Username, req.Password)
+	// Create first user — also opens an initial session so the wizard's
+	// "you're in" page works without a redirect through /login.
+	sessionID, user, err := h.service.CreateFirstUser(req.Username, req.Password, sessionContextFromRequest(r, false))
 	if err != nil {
 		if err.Error() == "setup already completed: users already exist" {
 			http.Error(w, "Setup already completed", http.StatusConflict)
@@ -509,19 +553,10 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set httpOnly cookie with JWT token (same as HandleLogin)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "audiod_token",
-		Value:    token,
-		Path:     "/",
-		MaxAge:   7 * 24 * 60 * 60, // 7 days
-		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, sessionID, false)
 
 	response := SetupResponse{
-		Token: token,
+		Token: sessionID,
 		User:  user.ToResponse(),
 	}
 

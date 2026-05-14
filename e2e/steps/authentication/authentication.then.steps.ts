@@ -71,6 +71,33 @@ Then('Reset code is logged to server console', async function (this: AudiodWorld
 	expect(this.resetCode).toMatch(/^[A-Z0-9]+$/);
 });
 
+// The session cookie's Max-Age is set from the server's window (30d default,
+// 90d remember-me). Playwright exposes `expires` as a unix timestamp;
+// compare against now() with a generous tolerance so the assertion isn't
+// fragile against minor clock skew or request latency.
+Then(
+	'Session is set to expire in approximately {int} days',
+	async function (this: AudiodWorld, days: number) {
+		const cookies = await this.getPage().context().cookies();
+		const sess = cookies.find((c) => c.name === 'audiod_token');
+		if (!sess) {
+			throw new Error('audiod_token cookie not set after login');
+		}
+		const nowSec = Date.now() / 1000;
+		const expectedSec = days * 86400;
+		const actualSec = sess.expires - nowSec;
+		// ±1 hour tolerance — generous enough for slow CI but tight enough to
+		// catch a 7-day vs 30-day vs 90-day misconfiguration.
+		const lower = expectedSec - 3600;
+		const upper = expectedSec + 3600;
+		if (actualSec < lower || actualSec > upper) {
+			throw new Error(
+				`Session cookie expires in ~${(actualSec / 86400).toFixed(2)}d; expected ~${days}d (got ${actualSec}s, window ${lower}..${upper}s)`
+			);
+		}
+	}
+);
+
 Then('Weak password warning is shown', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	const warning = page.locator('[data-testid="weak-password-warning"]');

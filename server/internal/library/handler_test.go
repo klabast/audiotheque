@@ -2,6 +2,7 @@ package library
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -147,19 +148,37 @@ func createTestAuthService() *auth.Service {
 			1: createAdminUser(),
 		},
 	}
-	return auth.NewService(repo)
+	testSessionRepo = auth.NewInMemorySessionRepository()
+	return auth.NewService(repo, testSessionRepo)
 }
 
-// addAuthCookie adds a valid JWT cookie to the request for testing
+// testSessionRepo is the in-memory session store shared by addAuthCookie
+// and the auth service constructed in newAuthService. Tests that bypass
+// newAuthService (constructing auth.NewService inline) must seed this from
+// their own setup.
+var testSessionRepo auth.SessionRepository
+
+// addAuthCookie creates a session row for userID in testSessionRepo and
+// attaches its opaque ID to req as the audiod_token cookie. Mirrors how a
+// real login wires the cookie, so the handler under test resolves the user
+// via the same path production does.
 func addAuthCookie(req *http.Request, userID int64) error {
-	token, err := auth.GenerateToken(userID, "admin")
+	if testSessionRepo == nil {
+		testSessionRepo = auth.NewInMemorySessionRepository()
+	}
+	id := fmt.Sprintf("test-session-%d-%d", userID, time.Now().UnixNano())
+	now := time.Now()
+	err := testSessionRepo.Create(&auth.Session{
+		ID:         id,
+		UserID:     userID,
+		CreatedAt:  now,
+		LastSeenAt: now,
+		ExpiresAt:  now.Add(time.Hour),
+	})
 	if err != nil {
 		return err
 	}
-	req.AddCookie(&http.Cookie{
-		Name:  "audiod_token",
-		Value: token,
-	})
+	req.AddCookie(&http.Cookie{Name: "audiod_token", Value: id})
 	return nil
 }
 
@@ -486,9 +505,10 @@ func TestHandleDeleteLibrary_Forbidden(t *testing.T) {
 			},
 		},
 	}
+	testSessionRepo = auth.NewInMemorySessionRepository()
 	handler := &Handler{
 		service:     mockSvc,
-		authService: auth.NewService(repo),
+		authService: auth.NewService(repo, testSessionRepo),
 	}
 
 	mux := http.NewServeMux()

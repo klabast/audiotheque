@@ -25,6 +25,42 @@ When(
 	}
 );
 
+// "...without keeping logged in" mirrors the default login flow today — there
+// is no "Keep me logged in" checkbox in this slice. Once the checkbox lands
+// (next slice), this step ensures it is unchecked before submission. The
+// existing 30-day session expiry assertion is what differentiates this from
+// the future "...and keeps logged in" variant (90-day window).
+When(
+	'User authenticates with username {string} and password {string} without keeping logged in',
+	async function (this: AudiodWorld, username: string, password: string) {
+		const page = this.getPage();
+
+		if (!page.url().includes('/login')) {
+			await page.goto('/login');
+		}
+
+		await page.fill('[data-testid="username-input"]', username);
+		await page.fill('[data-testid="password-input"]', password);
+
+		// "keep me logged in" checkbox may not exist yet; if present, ensure unchecked.
+		const keep = page.locator('[data-testid="keep-logged-in-checkbox"]');
+		if ((await keep.count()) > 0) {
+			if (await keep.isChecked()) {
+				await keep.uncheck();
+			}
+		}
+
+		await page.click('[data-testid="submit-login-button"]');
+
+		await Promise.race([
+			page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 3000 }).catch(() => {}),
+			page.waitForSelector('[data-testid="login-error"]', { timeout: 3000 }).catch(() => {})
+		]);
+
+		this.currentUser = username;
+	}
+);
+
 When(
 	'User changes username to {string} and password to {string}',
 	async function (this: AudiodWorld, newUsername: string, newPassword: string) {
