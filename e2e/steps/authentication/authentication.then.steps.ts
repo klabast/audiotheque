@@ -71,6 +71,18 @@ Then('Reset code is logged to server console', async function (this: AudiodWorld
 	expect(this.resetCode).toMatch(/^[A-Z0-9]+$/);
 });
 
+Then('Weak password warning is shown', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const warning = page.locator('[data-testid="weak-password-warning"]');
+	await expect(warning).toBeVisible();
+});
+
+Then('Weak password warning is not shown', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const warning = page.locator('[data-testid="weak-password-warning"]');
+	await expect(warning).toBeHidden();
+});
+
 Then(
 	'Reset code is generated for {string}',
 	{ timeout: 30000 },

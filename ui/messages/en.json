@@ -144,5 +144,7 @@
 	"settings.tabs.devices": "Devices",
 	"settings.tabs.general": "General",
 	"settings.tabs.library": "Library",
-	"settings.tabs.streaming": "Streaming"
+	"settings.tabs.streaming": "Streaming",
+	"warnings.password_equals_username": "Don't use your username as your password — anyone who knows your username could sign in.",
+	"warnings.password_short": "Short passwords are easy to guess. Longer is stronger — we recommend a password manager to generate and remember a long unique password. :)"
 }

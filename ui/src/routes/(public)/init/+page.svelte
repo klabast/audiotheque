@@ -7,7 +7,7 @@
 	import { APP_NAME } from '$lib/branding';
 	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '$lib/components/ui';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { validatePassword, validatePasswordMatch } from '$lib/utils/validation';
+	import { assessPassword, validatePassword, validatePasswordMatch } from '$lib/utils/validation';
 	import * as m from '$lib/paraglide/messages';
 
 	const authService = new AuthService();
@@ -25,6 +25,10 @@
 	let confirmPassword = $state('');
 	let submitting = $state(false);
 	let error = $state('');
+
+	// Non-blocking weakness signals — re-evaluated live as the user types.
+	// Empty array = no warning to show.
+	const passwordWarnings = $derived(assessPassword(password, username));
 
 	async function handleSubmit() {
 		error = '';
@@ -125,6 +129,18 @@
 						data-testid="password-input"
 					/>
 				</div>
+
+				{#if passwordWarnings.length > 0}
+					<Alert variant="warning" data-testid="weak-password-warning">
+						{#each passwordWarnings as warning (warning)}
+							{#if warning === 'short'}
+								<div>{m['warnings.password_short']()}</div>
+							{:else if warning === 'equals_username'}
+								<div>{m['warnings.password_equals_username']()}</div>
+							{/if}
+						{/each}
+					</Alert>
+				{/if}
 
 				<div>
 					<Label for="confirmPassword">{m['fields.confirm_password']()}</Label>

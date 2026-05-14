@@ -7,8 +7,12 @@ import (
 )
 
 const (
-	// Password validation
-	MinPasswordLength = 8
+	// Password validation. MinPasswordLength is intentionally 1 (non-empty).
+	// Policy: warn, don't block — any non-empty password is accepted, and the
+	// UI surfaces a non-blocking warning for short / equals-username / etc.
+	// Login rate limiting (deferred, see roadmap) is the proper defense
+	// against brute force, not a length minimum.
+	MinPasswordLength = 1
 	MaxPasswordLength = 64
 
 	// Username validation
@@ -80,7 +84,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Password) < MinPasswordLength || len(req.Password) > MaxPasswordLength {
-		http.Error(w, "Password must be between 8 and 64 characters", http.StatusBadRequest)
+		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -248,7 +252,7 @@ func (h *Handler) HandleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.NewPassword) < MinPasswordLength || len(req.NewPassword) > MaxPasswordLength {
-		http.Error(w, "Password must be between 8 and 64 characters", http.StatusBadRequest)
+		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -381,7 +385,7 @@ func (h *Handler) HandleConfirmPasswordReset(w http.ResponseWriter, r *http.Requ
 	}
 
 	if len(req.NewPassword) < MinPasswordLength || len(req.NewPassword) > MaxPasswordLength {
-		http.Error(w, "Password must be between 8 and 64 characters", http.StatusBadRequest)
+		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -489,7 +493,7 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Password) < MinPasswordLength || len(req.Password) > MaxPasswordLength {
-		http.Error(w, "Password must be between 8 and 64 characters", http.StatusBadRequest)
+		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
 		return
 	}
 
