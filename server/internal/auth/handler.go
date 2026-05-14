@@ -40,6 +40,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/auth/password", h.HandleUpdatePassword)
 	mux.HandleFunc("POST /api/auth/password/reset/request", h.HandleRequestPasswordReset)
 	mux.HandleFunc("POST /api/auth/password/reset/confirm", h.HandleConfirmPasswordReset)
+	mux.HandleFunc("POST /api/auth/verify-password", h.HandleVerifyPassword)
 
 	// Active sessions (Settings → Security tab).
 	mux.HandleFunc("GET /api/auth/sessions", h.HandleListSessions)
@@ -481,6 +482,62 @@ func (h *Handler) HandleSetupRequired(w http.ResponseWriter, r *http.Request) {
 // cookie refresh happen inside AuthenticateRequest.
 func userFromSessionCookie(w http.ResponseWriter, r *http.Request, service *Service) (*User, error) {
 	return AuthenticateRequest(w, r, service)
+}
+
+type VerifyPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// HandleVerifyPassword handles POST /api/auth/verify-password
+// @Summary Verify the caller's password (sudo re-confirmation)
+// @Description Re-checks the authenticated user's password without rotating
+// @Description the session. Used by the sudo modal to gate sensitive ops:
+// @Description on 204 the caller proceeds with the wrapped action; on 401
+// @Description the modal stays open and shows an error.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body VerifyPasswordRequest true "Password to verify"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Router /auth/verify-password [post]
+// @ID verifyPassword
+func (h *Handler) HandleVerifyPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Auth check is the standard cookie path. Critically we DON'T issue a
+	// new cookie or open a session here — verify is a "prove who you are
+	// right now" probe, not a re-login.
+	user, err := userFromSessionCookie(w, r, h.service)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req VerifyPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Password == "" {
+		http.Error(w, "Password is required", http.StatusBadRequest)
+		return
+	}
+
+	// Match the same error mapping as Login: collapse "no such user" and
+	// "wrong password" into a single 401 so the response shape doesn't leak
+	// which one was incorrect (even though "the user is the cookie-holder"
+	// is already known to the caller, keeping the contract uniform).
+	if _, err := h.service.Authenticate(user.Username, req.Password); err != nil {
+		http.Error(w, "Incorrect password", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // currentSessionID returns the raw session id from the request cookie, or

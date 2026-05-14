@@ -160,13 +160,53 @@ When(
 		if (!page.url().includes('/settings/security')) {
 			await openSecuritySettings(page);
 		}
+		// "Log out of all devices" is sudo-gated: clicking the button opens
+		// the password-confirm modal; the actual revoke fires only after
+		// the modal accepts the password.
+		await page.click('[data-testid="logout-all-button"]');
+		await page.waitForSelector('[data-testid="logout-all-sudo-modal"]', { timeout: 5000 });
+		const password = this.currentPassword || 'alicepass123';
+		await page.fill('[data-testid="logout-all-sudo-password-input"]', password);
 		const respPromise = page.waitForResponse(
 			(r) => r.url().includes('/api/auth/sessions/revoke-all'),
 			{ timeout: 5000 }
 		);
-		await page.click('[data-testid="logout-all-button"]');
+		await page.click('[data-testid="logout-all-sudo-confirm-button"]');
 		await respPromise;
 		await page.waitForURL(/\/login/, { timeout: 5000 });
+	}
+);
+
+// "Attempts to" semantic: triggers the sudo-gated flow but stops at the
+// modal — used by the sudo-confirmation scenarios that need to inspect the
+// prompt before deciding what password to type.
+When('User attempts to log out of all devices', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	if (!page.url().includes('/settings/security')) {
+		await openSecuritySettings(page);
+	}
+	await page.click('[data-testid="logout-all-button"]');
+	await page.waitForSelector('[data-testid="logout-all-sudo-modal"]', { timeout: 5000 });
+});
+
+// Fills the open sudo modal and clicks Confirm. Pairs with "attempts to..."
+// above. Wraps either a 204 (modal closes, wrapped action fires) or a 401
+// (modal stays open, error visible) — the calling scenario asserts which.
+When(
+	'User confirms with password {string}',
+	async function (this: AudiodWorld, password: string) {
+		const page = this.getPage();
+		await page.fill('[data-testid="logout-all-sudo-password-input"]', password);
+		const resp = page.waitForResponse(
+			(r) => r.url().includes('/api/auth/verify-password'),
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="logout-all-sudo-confirm-button"]');
+		await resp.catch(() => {
+			// Network error surfaces as a Then-step failure rather than here.
+		});
+		// Let any subsequent redirect / DOM update settle before the next step.
+		await page.waitForLoadState('networkidle').catch(() => {});
 	}
 );
 

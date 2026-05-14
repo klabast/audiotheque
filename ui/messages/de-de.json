@@ -152,6 +152,8 @@
 	"settings.security.last_seen": "Zuletzt gesehen {when}",
 	"settings.security.loading": "Wird geladen…",
 	"settings.security.logout_all": "Von allen Geräten abmelden",
+	"settings.security.logout_all_confirm": "Du wirst überall abgemeldet — auch in diesem Browser. Gib dein Passwort ein, um zu bestätigen.",
+	"settings.security.logout_all_title": "Von allen Geräten abmelden?",
 	"settings.security.logout_others": "Von allen anderen Geräten abmelden",
 	"settings.security.minutes_ago": "vor {n}min",
 	"settings.security.others_logged_out": "Andere Geräte abgemeldet.",
@@ -167,6 +169,11 @@
 	"settings.tabs.library": "Bibliothek",
 	"settings.tabs.security": "Sicherheit",
 	"settings.tabs.streaming": "Streaming",
+	"sudo.cancel": "Abbrechen",
+	"sudo.confirming": "Wird bestätigt…",
+	"sudo.error_generic": "Passwort konnte nicht verifiziert werden. Bitte erneut versuchen.",
+	"sudo.error_wrong_password": "Falsches Passwort.",
+	"sudo.password_label": "Dein Passwort",
 	"warnings.password_equals_username": "Verwende deinen Benutzernamen nicht als Passwort — wer den Benutzernamen kennt, könnte sich anmelden.",
 	"warnings.password_short": "Kurze Passwörter lassen sich leicht erraten. Länger ist stärker — wir empfehlen einen Passwort-Manager für ein langes, einzigartiges Passwort. :)"
 }

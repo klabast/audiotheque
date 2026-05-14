@@ -127,6 +127,15 @@ class ApiService {
 		return authApi.logout();
 	}
 
+	/**
+	 * Re-verify the current user's password without rotating the session.
+	 * Returns void on 204; throws (with a status-bearing error) otherwise.
+	 * Used by the SudoConfirmModal before sensitive operations.
+	 */
+	async verifyPassword(password: string) {
+		return authApi.verifyPassword({ request: { password } });
+	}
+
 	// --- Active sessions (Settings → Security) ----------------------------
 
 	async listSessions() {

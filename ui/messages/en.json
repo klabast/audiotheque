@@ -152,6 +152,8 @@
 	"settings.security.last_seen": "Last seen {when}",
 	"settings.security.loading": "Loading…",
 	"settings.security.logout_all": "Log out of all devices",
+	"settings.security.logout_all_confirm": "This will sign you out everywhere — including this browser. Enter your password to confirm.",
+	"settings.security.logout_all_title": "Log out of all devices?",
 	"settings.security.logout_others": "Log out of all other devices",
 	"settings.security.minutes_ago": "{n}m ago",
 	"settings.security.others_logged_out": "Other devices logged out.",
@@ -167,6 +169,11 @@
 	"settings.tabs.library": "Library",
 	"settings.tabs.security": "Security",
 	"settings.tabs.streaming": "Streaming",
+	"sudo.cancel": "Cancel",
+	"sudo.confirming": "Confirming…",
+	"sudo.error_generic": "Could not verify password. Try again.",
+	"sudo.error_wrong_password": "Incorrect password.",
+	"sudo.password_label": "Your password",
 	"warnings.password_equals_username": "Don't use your username as your password — anyone who knows your username could sign in.",
 	"warnings.password_short": "Short passwords are easy to guess. Longer is stronger — we recommend a password manager to generate and remember a long unique password. :)"
 }

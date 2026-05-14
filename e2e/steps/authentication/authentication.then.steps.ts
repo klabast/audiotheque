@@ -179,6 +179,32 @@ Then(
 	}
 );
 
+Then('User is prompted to confirm their password', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const modal = page.locator('[data-testid="logout-all-sudo-modal"]');
+	await expect(modal).toBeVisible();
+	await expect(page.locator('[data-testid="logout-all-sudo-password-input"]')).toBeVisible();
+});
+
+// After a wrong password, the modal stays open and shows an error. The user
+// is still on the Security settings page (no navigation happened).
+Then('Sudo confirmation is rejected', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const error = page.locator('[data-testid="logout-all-sudo-error"]');
+	await expect(error).toBeVisible();
+	await expect(page.locator('[data-testid="logout-all-sudo-modal"]')).toBeVisible();
+});
+
+Then(
+	'User remains logged in as {string}',
+	async function (this: AudiodWorld, username: string) {
+		const page = this.getPage();
+		await expect(page).not.toHaveURL(/\/login/);
+		await expect(page).not.toHaveURL(/\/init/);
+		this.currentUser = username;
+	}
+);
+
 Then('Weak password warning is shown', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	const warning = page.locator('[data-testid="weak-password-warning"]');

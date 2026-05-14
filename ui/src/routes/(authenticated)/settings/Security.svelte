@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/services/api';
 	import type { AuthSessionInfo } from '$lib/api/generated/src';
-	import { Alert, Button } from '$lib/components/ui';
+	import { Alert, Button, SudoConfirmModal } from '$lib/components/ui';
 	import { X } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 
@@ -11,6 +11,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
+	let showLogoutAllSudo = $state(false);
 
 	async function refresh() {
 		try {
@@ -97,7 +98,15 @@
 		}
 	}
 
+	// Wiping every session is the most destructive action on this page —
+	// gate it behind the sudo modal so a left-open browser tab can't be
+	// hijacked into kicking the user out everywhere.
+	function startLogOutAll() {
+		showLogoutAllSudo = true;
+	}
+
 	async function logOutAll() {
+		showLogoutAllSudo = false;
 		try {
 			await api.revokeAllSessions();
 			await goto('/login');
@@ -180,10 +189,20 @@
 				>
 					{m['settings.security.logout_others']()}
 				</Button>
-				<Button data-testid="logout-all-button" onclick={logOutAll} variant="danger">
+				<Button data-testid="logout-all-button" onclick={startLogOutAll} variant="danger">
 					{m['settings.security.logout_all']()}
 				</Button>
 			</div>
 		{/if}
 	</div>
 </div>
+
+<SudoConfirmModal
+	confirmLabel={m['settings.security.logout_all']()}
+	description={m['settings.security.logout_all_confirm']()}
+	isOpen={showLogoutAllSudo}
+	onCancel={() => (showLogoutAllSudo = false)}
+	onConfirm={logOutAll}
+	testidPrefix="logout-all-sudo"
+	title={m['settings.security.logout_all_title']()}
+/>
