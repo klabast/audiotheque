@@ -2,8 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,6 +49,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/auth/sessions/{publicId}", h.HandleRevokeSession)
 	mux.HandleFunc("POST /api/auth/sessions/revoke-others", h.HandleRevokeOtherSessions)
 	mux.HandleFunc("POST /api/auth/sessions/revoke-all", h.HandleRevokeAllSessions)
+
+	// User management (Settings → Users tab). Admin-only across the board.
+	mux.HandleFunc("GET /api/users", h.HandleListUsers)
+	mux.HandleFunc("POST /api/users", h.HandleCreateUser)
+	mux.HandleFunc("DELETE /api/users/{id}", h.HandleDeleteUser)
+	mux.HandleFunc("PUT /api/users/{id}/password", h.HandleResetUserPassword)
 }
 
 type LoginRequest struct {
@@ -774,4 +782,189 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
+}
+
+// --- User management (admin actions on other users) ---
+
+// requireAdmin checks the cookie + admin flag and surfaces the right HTTP
+// status. Mirrors the pattern in settings.Handler but inline here to keep the
+// auth handlers self-contained.
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (*User, bool) {
+	user, err := userFromSessionCookie(w, r, h.service)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return nil, false
+	}
+	if err := RequireAdmin(user); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return nil, false
+	}
+	return user, true
+}
+
+type UsersListResponse struct {
+	Users []UserResponse `json:"users"`
+}
+
+// HandleListUsers handles GET /api/users
+// @Summary List all users
+// @Description Lists every user in the system. Admin-only.
+// @Tags users
+// @Produce json
+// @Success 200 {object} UsersListResponse
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 403 {string} string "Forbidden"
+// @Router /users [get]
+// @ID listUsers
+func (h *Handler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	users, err := h.service.ListUsers()
+	if err != nil {
+		log.Printf("ListUsers failed: %v", err)
+		http.Error(w, "Failed to list users", http.StatusInternalServerError)
+		return
+	}
+	out := make([]UserResponse, 0, len(users))
+	for _, u := range users {
+		out = append(out, u.ToResponse())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(UsersListResponse{Users: out}); err != nil {
+		log.Printf("Encode users list failed: %v", err)
+	}
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	IsAdmin  bool   `json:"is_admin"`
+}
+
+// HandleCreateUser handles POST /api/users
+// @Summary Create a new user
+// @Description Creates a new user account. Admin-only. Once the first admin
+// @Description exists, every subsequent user is created through this endpoint
+// @Description (the /auth/setup endpoint stops working after first-run).
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body CreateUserRequest true "New user credentials"
+// @Success 201 {object} UserResponse
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 403 {string} string "Forbidden"
+// @Router /users [post]
+// @ID createUser
+func (h *Handler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var req CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "username and password are required", http.StatusBadRequest)
+		return
+	}
+	user, err := h.service.CreateUser(req.Username, req.Password, req.IsAdmin)
+	if err != nil {
+		log.Printf("CreateUser failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(user.ToResponse()); err != nil {
+		log.Printf("Encode created user failed: %v", err)
+	}
+}
+
+// HandleDeleteUser handles DELETE /api/users/{id}
+// @Summary Delete a user
+// @Description Removes a user row. Admin-only. Refuses to delete the
+// @Description calling user or the system's last admin.
+// @Tags users
+// @Param id path int true "User id"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 403 {string} string "Forbidden"
+// @Failure 404 {string} string "Not Found"
+// @Router /users/{id} [delete]
+// @ID deleteUser
+func (h *Handler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+	if err := h.service.DeleteUser(actor.ID, id); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		// Self-delete and last-admin protection both surface here.
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type ResetUserPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+// HandleResetUserPassword handles PUT /api/users/{id}/password
+// @Summary Reset another user's password
+// @Description Admin-only password reset that bypasses the current-password
+// @Description check (which the self-service /auth/password endpoint enforces).
+// @Tags users
+// @Accept json
+// @Param id path int true "User id"
+// @Param request body ResetUserPasswordRequest true "New password"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 403 {string} string "Forbidden"
+// @Failure 404 {string} string "Not Found"
+// @Router /users/{id}/password [put]
+// @ID resetUserPassword
+func (h *Handler) HandleResetUserPassword(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+	var req ResetUserPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.NewPassword == "" {
+		http.Error(w, "new_password is required", http.StatusBadRequest)
+		return
+	}
+	if err := h.service.AdminResetUserPassword(id, req.NewPassword); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("AdminResetUserPassword failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

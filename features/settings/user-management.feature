@@ -1,4 +1,4 @@
-@wip @desktop @tablet @mobile
+@desktop @tablet @mobile
 Feature: User Management
   As an Audiotheque admin
   I want to add, remove, and reset passwords for other users

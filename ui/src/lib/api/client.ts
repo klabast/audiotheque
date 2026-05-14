@@ -5,7 +5,8 @@ import {
 	LibrariesApi,
 	PlaybackApi,
 	SystemApi,
-	TracksApi
+	TracksApi,
+	UsersApi
 } from './generated/src';
 
 /**
@@ -24,6 +25,7 @@ export const librariesApi = new LibrariesApi(apiConfig);
 export const albumsApi = new AlbumsApi(apiConfig);
 export const playbackApi = new PlaybackApi(apiConfig);
 export const tracksApi = new TracksApi(apiConfig);
+export const usersApi = new UsersApi(apiConfig);
 
 export * from './generated/src/models';
 export { Configuration } from './generated/src';

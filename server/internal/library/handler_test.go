@@ -118,6 +118,22 @@ func (m *mockAuthRepository) GetFirstAdmin() (*auth.User, error) {
 	return lowest, nil
 }
 
+func (m *mockAuthRepository) ListUsers() ([]*auth.User, error) {
+	out := make([]*auth.User, 0, len(m.users))
+	for _, u := range m.users {
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (m *mockAuthRepository) Delete(userID int64) error {
+	if _, ok := m.users[userID]; !ok {
+		return auth.ErrUserNotFound
+	}
+	delete(m.users, userID)
+	return nil
+}
+
 func (m *mockAuthRepository) Create(username, passwordHash string, isAdmin bool) (*auth.User, error) {
 	return nil, nil
 }

@@ -146,6 +146,62 @@ LIMIT 1`
 	return user, nil
 }
 
+// ListUsers returns every user row in id order. Feeds the admin Users
+// settings panel and CLI listings.
+func (r *repository) ListUsers() ([]*User, error) {
+	//language=SQL
+	query := `
+SELECT id,
+       username,
+       password_hash,
+       is_admin,
+       created_at,
+       updated_at
+FROM user
+ORDER BY id ASC`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u := &User{}
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.PasswordHash, &u.IsAdmin,
+			&u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// Delete removes a user row. ON DELETE CASCADE on the dependent tables
+// (session, reset_code, library_access) handles the rest.
+func (r *repository) Delete(userID int64) error {
+	//language=SQL
+	query := `DELETE FROM user WHERE id = ?`
+	result, err := r.db.Exec(query, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 // Create creates a new user
 func (r *repository) Create(username, passwordHash string, isAdmin bool) (*User, error) {
 	//language=SQL

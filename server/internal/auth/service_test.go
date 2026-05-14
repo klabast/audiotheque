@@ -128,6 +128,31 @@ func (m *mockRepository) GetFirstAdmin() (*User, error) {
 	return lowest, nil
 }
 
+func (m *mockRepository) ListUsers() ([]*User, error) {
+	users := make([]*User, 0, len(m.usersID))
+	for _, u := range m.usersID {
+		users = append(users, u)
+	}
+	for i := 0; i < len(users); i++ {
+		for j := i + 1; j < len(users); j++ {
+			if users[j].ID < users[i].ID {
+				users[i], users[j] = users[j], users[i]
+			}
+		}
+	}
+	return users, nil
+}
+
+func (m *mockRepository) Delete(userID int64) error {
+	u, ok := m.usersID[userID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	delete(m.usersID, userID)
+	delete(m.users, u.Username)
+	return nil
+}
+
 func newMockRepository() *mockRepository {
 	return &mockRepository{
 		users:      make(map[string]*User),
@@ -765,5 +790,125 @@ func TestAuthEnabled_DelegatesToInjectedFn(t *testing.T) {
 	enabled = false
 	if service.AuthEnabled() {
 		t.Error("AuthEnabled() = true; want false when fn returns false")
+	}
+}
+
+// --- User management (admin actions on other users) ---
+
+// TestListUsers_ReturnsAllUsers verifies the service exposes the full user
+// list — feeds the admin Users settings panel.
+func TestListUsers_ReturnsAllUsers(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	repo.users["alice"] = &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[1] = repo.users["alice"]
+	repo.users["bob"] = &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: false}
+	repo.usersID[2] = repo.users["bob"]
+
+	users, err := service.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	if len(users) != 2 {
+		t.Errorf("got %d users, want 2", len(users))
+	}
+}
+
+// TestDeleteUser_RemovesRow verifies the happy path — a different user is
+// deleted and disappears from the user list.
+func TestDeleteUser_RemovesRow(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	bob := &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: false}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	if err := service.DeleteUser(alice.ID, bob.ID); err != nil {
+		t.Fatalf("DeleteUser failed: %v", err)
+	}
+	if _, exists := repo.users["bob"]; exists {
+		t.Error("bob still in repo after delete")
+	}
+}
+
+// TestDeleteUser_RejectsSelfDelete verifies the actor can't delete their own
+// row — protects the admin from accidentally locking themselves out.
+func TestDeleteUser_RejectsSelfDelete(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+
+	if err := service.DeleteUser(alice.ID, alice.ID); err == nil {
+		t.Error("expected error when actor deletes themselves, got nil")
+	}
+	if _, exists := repo.users["alice"]; !exists {
+		t.Error("alice gone from repo despite self-delete rejection")
+	}
+}
+
+// TestDeleteUser_RejectsLastAdmin keeps the system from being orphaned by
+// deleting its last admin user.
+func TestDeleteUser_RejectsLastAdmin(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	bob := &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: true}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	// alice deletes bob — fine, still one admin left
+	if err := service.DeleteUser(alice.ID, bob.ID); err != nil {
+		t.Fatalf("DeleteUser(alice→bob) failed: %v", err)
+	}
+
+	// Now alice is the sole admin; try to delete her from some hypothetical
+	// other admin context (use a different actor ID that doesn't trip the
+	// self-delete check).
+	if err := service.DeleteUser(99, alice.ID); err == nil {
+		t.Error("expected error when deleting last admin, got nil")
+	}
+	if _, exists := repo.users["alice"]; !exists {
+		t.Error("alice removed despite last-admin protection")
+	}
+}
+
+// TestAdminResetUserPassword_BypassesCurrentPasswordCheck verifies an admin
+// can change another user's password without knowing the old one (the
+// non-self UpdatePassword path requires the current password).
+func TestAdminResetUserPassword_BypassesCurrentPasswordCheck(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	oldHash, _ := HashPassword("bobOldPass1234")
+	bob := &User{ID: 2, Username: "bob", PasswordHash: oldHash, IsAdmin: false}
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	if err := service.AdminResetUserPassword(bob.ID, "bobNewPass1234"); err != nil {
+		t.Fatalf("AdminResetUserPassword failed: %v", err)
+	}
+
+	// Old password should no longer authenticate.
+	if _, err := service.Authenticate("bob", "bobOldPass1234"); err == nil {
+		t.Error("old password still works after reset")
+	}
+	// New password should authenticate.
+	if _, err := service.Authenticate("bob", "bobNewPass1234"); err != nil {
+		t.Errorf("new password rejected after reset: %v", err)
 	}
 }

@@ -23,7 +23,13 @@ type Repository interface {
 	// admin that auth-disabled mode resolves every request to. Returns
 	// ErrUserNotFound if no admin exists.
 	GetFirstAdmin() (*User, error)
+	// ListUsers returns every user row in id order. Feeds the admin Users
+	// settings panel.
+	ListUsers() ([]*User, error)
 	Create(username, passwordHash string, isAdmin bool) (*User, error)
+	// Delete removes a user row. Cascades to dependent rows (sessions,
+	// reset codes, etc.) via FK ON DELETE CASCADE.
+	Delete(userID int64) error
 	UpdatePassword(userID int64, newPasswordHash string) error
 
 	// Reset code management
@@ -320,6 +326,52 @@ func (s *Service) CreateFirstUser(username, password string, ctx SessionContext)
 	}
 
 	return sessionID, user, nil
+}
+
+// ListUsers returns every user row, ordered by id. Caller is expected to
+// gate this on admin via auth.RequireAdmin — the service itself doesn't
+// know who's asking.
+func (s *Service) ListUsers() ([]*User, error) {
+	return s.repo.ListUsers()
+}
+
+// DeleteUser removes targetID. Refuses to delete the actor's own row and
+// refuses to remove the system's last admin. Both checks happen here (in
+// the service layer) so the handler can stay thin and the CLI gets the
+// same guarantees for free.
+func (s *Service) DeleteUser(actorID, targetID int64) error {
+	if actorID == targetID {
+		return fmt.Errorf("cannot delete the currently signed-in user")
+	}
+	target, err := s.repo.GetByID(targetID)
+	if err != nil {
+		return err
+	}
+	if target.IsAdmin {
+		count, err := s.repo.GetAdminCount()
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return fmt.Errorf("cannot delete the last admin user")
+		}
+	}
+	return s.repo.Delete(targetID)
+}
+
+// AdminResetUserPassword replaces targetID's password without verifying the
+// existing one — distinct from Service.UpdatePassword which requires the
+// user's current password. The action is gated on admin at the handler
+// layer; here we just hash and write.
+func (s *Service) AdminResetUserPassword(targetID int64, newPassword string) error {
+	if _, err := s.repo.GetByID(targetID); err != nil {
+		return err
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePassword(targetID, hash)
 }
 
 // CreateUser creates a new user account

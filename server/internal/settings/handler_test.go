@@ -35,6 +35,14 @@ func (m *mockAuthRepository) GetFirstAdmin() (*auth.User, error) {
 	}
 	return nil, auth.ErrUserNotFound
 }
+func (m *mockAuthRepository) ListUsers() ([]*auth.User, error) {
+	out := make([]*auth.User, 0, len(m.users))
+	for _, u := range m.users {
+		out = append(out, u)
+	}
+	return out, nil
+}
+func (m *mockAuthRepository) Delete(int64) error                              { return nil }
 func (m *mockAuthRepository) Create(string, string, bool) (*auth.User, error) { return nil, nil }
 func (m *mockAuthRepository) UpdatePassword(int64, string) error         { return nil }
 func (m *mockAuthRepository) StoreResetCode(string, int64, time.Time) error { return nil }

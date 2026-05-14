@@ -545,6 +545,49 @@ class ApiService {
 		});
 		await throwIfNotOk(response, 'Failed to update auth setting');
 	}
+
+	// --- User management (admin) ---
+
+	async listUsers(): Promise<Array<{ id: number; username: string; is_admin: boolean }>> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users`, { credentials: 'include' });
+		await throwIfNotOk(response, 'Failed to load users');
+		const body = (await response.json()) as {
+			users: Array<{ id: number; username: string; is_admin: boolean }>;
+		};
+		return body.users ?? [];
+	}
+
+	async createUser(username: string, password: string, isAdmin: boolean = false): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ username, password, is_admin: isAdmin })
+		});
+		await throwIfNotOk(response, 'Failed to create user');
+	}
+
+	async deleteUser(id: number): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users/${id}`, {
+			method: 'DELETE',
+			credentials: 'include'
+		});
+		await throwIfNotOk(response, 'Failed to delete user');
+	}
+
+	async resetUserPassword(id: number, newPassword: string): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users/${id}/password`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ new_password: newPassword })
+		});
+		await throwIfNotOk(response, 'Failed to reset user password');
+	}
 }
 
 export const api = new ApiService();
