@@ -70,9 +70,12 @@ func startServer() error {
 	}
 	defer db.Close()
 
-	// Initialize auth
+	// Initialize auth (with DB-backed session store for browser sessions).
+	// Variable name is "authSessionRepo" to disambiguate from the playback
+	// SessionRepository defined further down — they're separate concerns.
 	authRepo := auth.NewRepository(db)
-	authService := auth.NewService(authRepo)
+	authSessionRepo := auth.NewSessionRepository(db)
+	authService := auth.NewService(authRepo, authSessionRepo)
 	authHandler := auth.NewHandler(authService)
 
 	// Initialize system
@@ -136,6 +139,11 @@ func startServer() error {
 	settingsRepo := settings.NewRepository(db)
 	settingsService := settings.NewService(settingsRepo)
 	settingsHandler := settings.NewHandler(settingsService, authService)
+
+	// Wire the auth-enabled lookup so middleware can short-circuit when an
+	// admin has turned login off. Kept as a setter (not a constructor arg) so
+	// the auth package has no compile-time dependency on settings.
+	authService.SetAuthEnabledFn(settingsService.IsAuthEnabled)
 
 	// Initialize device registry (DB-backed for production)
 	deviceRegistry := settings.NewDBDeviceRegistry(settingsRepo)

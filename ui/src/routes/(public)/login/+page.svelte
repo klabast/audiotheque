@@ -8,6 +8,7 @@
 
 	let username = $state('');
 	let password = $state('');
+	let rememberMe = $state(false);
 	let submitting = $state(false);
 
 	async function handleSubmit() {
@@ -19,7 +20,7 @@
 		auth.clearError();
 
 		try {
-			await auth.login(username, password);
+			await auth.login(username, password, rememberMe);
 			await goto('/');
 		} catch {
 			// Error is already in store, form will display it
@@ -85,6 +86,27 @@
 						type="password"
 						data-testid="password-input"
 					/>
+				</div>
+
+				<!-- "Keep me logged in" — opt-in to the longer 90-day sliding window.
+				     Default off → 30-day window. Sensitive actions still re-prompt
+				     for the password regardless (sudo modal, future slice). -->
+				<div class="flex items-start gap-2">
+					<input
+						bind:checked={rememberMe}
+						class="border-border bg-bg-secondary text-accent focus:ring-accent mt-0.5 h-4 w-4 rounded"
+						disabled={submitting}
+						id="keep-logged-in"
+						name="rememberMe"
+						type="checkbox"
+						data-testid="keep-logged-in-checkbox"
+					/>
+					<label class="text-text-secondary text-sm" for="keep-logged-in">
+						<span class="text-text-primary block font-medium"
+							>{m['auth.login.keep_logged_in']()}</span
+						>
+						<span class="block">{m['auth.login.keep_logged_in_hint']({ appName: APP_NAME })}</span>
+					</label>
 				</div>
 			</div>
 

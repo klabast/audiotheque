@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Alert, Button, Input, Label } from '$lib/components/ui';
 	import { api } from '$lib/services/api';
-	import { validatePassword, validatePasswordMatch } from '$lib/utils/validation';
+	import { assessPassword, validatePassword, validatePasswordMatch } from '$lib/utils/validation';
+	import { auth } from '$lib/stores/auth.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let currentPassword = $state('');
@@ -10,6 +11,10 @@
 	let isLoading = $state(false);
 	let error = $state('');
 	let success = $state(false);
+
+	// Non-blocking weakness signals for the new password. Re-evaluated live as
+	// the user types. Empty list = nothing to warn about.
+	const passwordWarnings = $derived(assessPassword(newPassword, auth.user?.username));
 
 	async function handlePasswordChange() {
 		error = '';
@@ -103,6 +108,18 @@
 					data-testid="new-password-input"
 				/>
 			</div>
+
+			{#if passwordWarnings.length > 0}
+				<Alert variant="warning" data-testid="weak-password-warning">
+					{#each passwordWarnings as warning (warning)}
+						{#if warning === 'short'}
+							<div>{m['warnings.password_short']()}</div>
+						{:else if warning === 'equals_username'}
+							<div>{m['warnings.password_equals_username']()}</div>
+						{/if}
+					{/each}
+				</Alert>
+			{/if}
 
 			<div>
 				<Label for="confirm-password">{m['fields.confirm_password']()}</Label>

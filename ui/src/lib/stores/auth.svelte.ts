@@ -41,12 +41,12 @@ export const auth = (() => {
 		 *
 		 * Sets loading state, calls service, updates store with result or error.
 		 */
-		async login(username: string, password: string): Promise<void> {
+		async login(username: string, password: string, rememberMe: boolean = false): Promise<void> {
 			loading = true;
 			error = null;
 
 			try {
-				user = await authService.login(username, password);
+				user = await authService.login(username, password, rememberMe);
 				loading = false;
 			} catch (e) {
 				user = null;

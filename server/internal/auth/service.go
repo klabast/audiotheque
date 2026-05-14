@@ -19,7 +19,17 @@ type Repository interface {
 	GetByID(id int64) (*User, error)
 	GetUserCount() (int, error)
 	GetAdminCount() (int, error)
+	// GetFirstAdmin returns the lowest-id admin user — the canonical "system"
+	// admin that auth-disabled mode resolves every request to. Returns
+	// ErrUserNotFound if no admin exists.
+	GetFirstAdmin() (*User, error)
+	// ListUsers returns every user row in id order. Feeds the admin Users
+	// settings panel.
+	ListUsers() ([]*User, error)
 	Create(username, passwordHash string, isAdmin bool) (*User, error)
+	// Delete removes a user row. Cascades to dependent rows (sessions,
+	// reset codes, etc.) via FK ON DELETE CASCADE.
+	Delete(userID int64) error
 	UpdatePassword(userID int64, newPasswordHash string) error
 
 	// Reset code management
@@ -32,16 +42,79 @@ type Repository interface {
 
 // Service handles authentication business logic
 type Service struct {
-	repo Repository
+	repo          Repository
+	sessions      SessionRepository
+	authEnabledFn func() (bool, error)
 }
 
-// NewService creates a new auth service
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+// NewService creates a new auth service. The session repository may be nil
+// only when sessions are not needed (e.g. CLI commands that don't issue
+// cookies) — every HTTP path that authenticates a browser request must
+// construct the Service with a real SessionRepository.
+func NewService(repo Repository, sessions SessionRepository) *Service {
+	return &Service{repo: repo, sessions: sessions}
 }
 
-// Login validates credentials and returns a JWT token and user
-func (s *Service) Login(username, password string) (string, *User, error) {
+// SetAuthEnabledFn wires the settings-backed auth-enabled lookup. Kept as a
+// setter rather than a constructor arg so the auth package stays free of any
+// dependency on the settings package (cmd/server is the only thing that knows
+// about both). When unset, AuthEnabled() returns true — the safe default.
+func (s *Service) SetAuthEnabledFn(fn func() (bool, error)) {
+	s.authEnabledFn = fn
+}
+
+// AuthEnabled reports whether this instance currently requires browser auth.
+// Errors from the injected fn are treated as "enabled" so a DB hiccup never
+// silently opens the app up.
+func (s *Service) AuthEnabled() bool {
+	if s.authEnabledFn == nil {
+		return true
+	}
+	enabled, err := s.authEnabledFn()
+	if err != nil {
+		return true
+	}
+	return enabled
+}
+
+// GetCanonicalAdmin returns the lowest-id admin user. Auth-disabled mode
+// resolves every authenticated handler to this user, so the rest of the
+// system continues to see a User pointer (audit logs, ownership checks,
+// etc.) without conditional plumbing.
+func (s *Service) GetCanonicalAdmin() (*User, error) {
+	return s.repo.GetFirstAdmin()
+}
+
+// SessionContext carries the request metadata recorded on a new session.
+// All fields are optional — empty strings are stored as empty strings.
+type SessionContext struct {
+	RememberMe bool
+	UserAgent  string
+	IP         string
+}
+
+// Authenticate verifies credentials and returns the user without creating
+// a session. CLI commands and other non-HTTP paths use this to gate admin
+// operations on a username/password without writing a cookie-backed session.
+func (s *Service) Authenticate(username, password string) (*User, error) {
+	user, err := s.repo.GetByUsername(username)
+	if err != nil {
+		return nil, ErrInvalidPassword
+	}
+	valid, err := VerifyPassword(password, user.PasswordHash)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, ErrInvalidPassword
+	}
+	return user, nil
+}
+
+// Login validates credentials and returns an opaque session ID (cookie value)
+// plus the authenticated user. The session row is persisted; logout/revoke
+// drops it.
+func (s *Service) Login(username, password string, ctx SessionContext) (string, *User, error) {
 	// Get user from repository
 	user, err := s.repo.GetByUsername(username)
 	if err != nil {
@@ -58,13 +131,148 @@ func (s *Service) Login(username, password string) (string, *User, error) {
 		return "", nil, ErrInvalidPassword
 	}
 
-	// Generate JWT token
-	token, err := GenerateToken(user.ID, user.Username)
+	// Open a session for this login
+	sessionID, err := s.CreateSession(user.ID, ctx)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return token, user, nil
+	return sessionID, user, nil
+}
+
+// CreateSession inserts a new session row for userID and returns the cookie
+// value (the row's opaque id). Window is 30d by default, 90d when
+// RememberMe is set — see SessionWindowDefault / SessionWindowRemember.
+func (s *Service) CreateSession(userID int64, ctx SessionContext) (string, error) {
+	id, err := generateSessionID()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC()
+	window := SessionWindowDefault
+	if ctx.RememberMe {
+		window = SessionWindowRemember
+	}
+	sess := &Session{
+		ID:         id,
+		UserID:     userID,
+		CreatedAt:  now,
+		LastSeenAt: now,
+		ExpiresAt:  now.Add(window),
+		RememberMe: ctx.RememberMe,
+		UserAgent:  ctx.UserAgent,
+		LastIP:     ctx.IP,
+	}
+	if err := s.sessions.Create(sess); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// ValidateSession resolves a cookie value to its user and the (possibly
+// renewed) session row. The session's last_seen_at and last_ip are updated
+// on every successful call. When less than half the configured window
+// remains, expires_at is bumped to now + window (sliding renewal). Callers
+// that hold a ResponseWriter should re-Set-Cookie after this returns so
+// the browser's cookie expiry tracks the bumped row.
+//
+// Returns ErrSessionNotFound for unknown or expired sessions, and lazily
+// deletes the row when expired.
+func (s *Service) ValidateSession(id, ip string) (*User, *Session, error) {
+	if id == "" {
+		return nil, nil, ErrSessionNotFound
+	}
+	sess, err := s.sessions.GetByID(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := time.Now().UTC()
+	if now.After(sess.ExpiresAt) {
+		// Best-effort cleanup; ignore delete errors so we always return the
+		// right auth signal to the caller.
+		_ = s.sessions.Delete(id)
+		return nil, nil, ErrSessionNotFound
+	}
+
+	// Sliding renewal: bump expires_at when less than half the window remains.
+	// Window is determined per-session by remember_me so the two TTLs (30d /
+	// 90d) renew consistently with the original login choice.
+	window := SessionWindowDefault
+	if sess.RememberMe {
+		window = SessionWindowRemember
+	}
+	newExpiresAt := sess.ExpiresAt
+	if sess.ExpiresAt.Sub(now) < window/2 {
+		newExpiresAt = now.Add(window)
+	}
+
+	// Per §7 of the roadmap, every authenticated request updates last_seen_at
+	// and last_ip. UpdateExpiry failures are logged but not fatal — auth
+	// must still succeed so the user isn't kicked out by a transient DB hiccup.
+	if err := s.sessions.UpdateExpiry(id, now, newExpiresAt, ip); err == nil {
+		sess.LastSeenAt = now
+		sess.ExpiresAt = newExpiresAt
+		sess.LastIP = ip
+	}
+
+	user, err := s.repo.GetByID(sess.UserID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, sess, nil
+}
+
+// DeleteSession removes a single session row (logout from one device).
+func (s *Service) DeleteSession(id string) error {
+	if id == "" {
+		return nil
+	}
+	return s.sessions.Delete(id)
+}
+
+// ListUserSessions returns the user's active sessions, ordered most-recent
+// first. Used by the Active Devices UI in Settings → Security.
+func (s *Service) ListUserSessions(userID int64) ([]*Session, error) {
+	return s.sessions.ListForUser(userID)
+}
+
+// DeleteUserSessionByPublicID revokes a single session of userID, identified
+// by its API-safe public id (SHA-256 hash of the raw session id). Returns
+// ErrSessionNotFound if no matching session belongs to userID — callers
+// surface this as 404. We iterate the user's sessions rather than indexing
+// by hash because typical N is small (one user, a handful of devices) and
+// this avoids a new column / migration.
+func (s *Service) DeleteUserSessionByPublicID(userID int64, publicID string) error {
+	sessions, err := s.sessions.ListForUser(userID)
+	if err != nil {
+		return err
+	}
+	for _, sess := range sessions {
+		if SessionPublicID(sess.ID) == publicID {
+			return s.sessions.Delete(sess.ID)
+		}
+	}
+	return ErrSessionNotFound
+}
+
+// DeleteOtherUserSessions revokes every session of userID except keepID
+// ("log out of all other devices"). Cookie on the current browser stays
+// valid; every other browser sees its next authenticated request rejected.
+func (s *Service) DeleteOtherUserSessions(userID int64, keepID string) error {
+	return s.sessions.DeleteAllForUserExcept(userID, keepID)
+}
+
+// DeleteAllUserSessions revokes every session of userID, including the
+// caller's current one ("log out of all devices"). The HTTP handler should
+// follow up by clearing the response cookie.
+func (s *Service) DeleteAllUserSessions(userID int64) error {
+	return s.sessions.DeleteAllForUser(userID)
+}
+
+// CleanupExpiredSessions drops session rows whose expires_at has passed.
+// Intended for the background jobs runner.
+func (s *Service) CleanupExpiredSessions() (int64, error) {
+	return s.sessions.DeleteExpired(time.Now().UTC())
 }
 
 // GetUserByID retrieves a user by ID
@@ -85,9 +293,10 @@ func (s *Service) DoesAdminUserExist() (bool, error) {
 	return count > 0, nil
 }
 
-// CreateFirstUser creates the first user (admin) account
-// Returns an error if users already exist
-func (s *Service) CreateFirstUser(username, password string) (string, *User, error) {
+// CreateFirstUser creates the first user (admin) account and opens a session
+// for them. Returns the session id (cookie value) plus the user.
+// Errors if users already exist.
+func (s *Service) CreateFirstUser(username, password string, ctx SessionContext) (string, *User, error) {
 	// Check if any users exist
 	count, err := s.repo.GetUserCount()
 	if err != nil {
@@ -110,13 +319,59 @@ func (s *Service) CreateFirstUser(username, password string) (string, *User, err
 		return "", nil, err
 	}
 
-	// Generate JWT token for auto-login
-	token, err := GenerateToken(user.ID, user.Username)
+	// Open a session for the freshly-created admin
+	sessionID, err := s.CreateSession(user.ID, ctx)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return token, user, nil
+	return sessionID, user, nil
+}
+
+// ListUsers returns every user row, ordered by id. Caller is expected to
+// gate this on admin via auth.RequireAdmin — the service itself doesn't
+// know who's asking.
+func (s *Service) ListUsers() ([]*User, error) {
+	return s.repo.ListUsers()
+}
+
+// DeleteUser removes targetID. Refuses to delete the actor's own row and
+// refuses to remove the system's last admin. Both checks happen here (in
+// the service layer) so the handler can stay thin and the CLI gets the
+// same guarantees for free.
+func (s *Service) DeleteUser(actorID, targetID int64) error {
+	if actorID == targetID {
+		return fmt.Errorf("cannot delete the currently signed-in user")
+	}
+	target, err := s.repo.GetByID(targetID)
+	if err != nil {
+		return err
+	}
+	if target.IsAdmin {
+		count, err := s.repo.GetAdminCount()
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return fmt.Errorf("cannot delete the last admin user")
+		}
+	}
+	return s.repo.Delete(targetID)
+}
+
+// AdminResetUserPassword replaces targetID's password without verifying the
+// existing one — distinct from Service.UpdatePassword which requires the
+// user's current password. The action is gated on admin at the handler
+// layer; here we just hash and write.
+func (s *Service) AdminResetUserPassword(targetID int64, newPassword string) error {
+	if _, err := s.repo.GetByID(targetID); err != nil {
+		return err
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePassword(targetID, hash)
 }
 
 // CreateUser creates a new user account

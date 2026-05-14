@@ -20,10 +20,21 @@ Feature: Change Password
     When User attempts to change password with mismatched confirmation
     Then User should see error "Passwords do not match"
 
-  Scenario: User cannot change password that is too short
-    When User attempts to change password to "short"
-    Then User should see error "Password must be at least 8 characters"
-
   Scenario: User cannot change password with wrong current password
     When User attempts to change password with wrong current password
     Then User should see error "Current password is incorrect"
+
+  Scenario: A very short password is warned about but still accepted
+    When User starts changing password from "alicepass123" to "p"
+    Then Weak password warning is shown
+    When User submits the password change
+    Then Password change succeeds
+    When User logs out
+    And User authenticates with username "alice" and password "p"
+    Then User should be logged in as "alice"
+
+  Scenario: A password matching the username is warned about but still accepted
+    When User starts changing password from "alicepass123" to "alice"
+    Then Weak password warning is shown
+    When User submits the password change
+    Then Password change succeeds

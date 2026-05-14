@@ -9,7 +9,30 @@ var (
 	ErrUserNotFound     = errors.New("user not found")
 	ErrInvalidPassword  = errors.New("invalid password")
 	ErrInvalidResetCode = errors.New("invalid or expired reset code")
+	ErrSessionNotFound  = errors.New("session not found or expired")
 )
+
+// SessionWindowDefault is how long a session lasts when "Keep me logged in"
+// is unchecked. SessionWindowRemember is the longer window for the opt-in.
+// Both renew on activity (sliding) — see Service.ValidateSession.
+const (
+	SessionWindowDefault  = 30 * 24 * time.Hour
+	SessionWindowRemember = 90 * 24 * time.Hour
+)
+
+// Session represents an active browser sign-in. The id is an opaque random
+// value stored in the audiod_token cookie; the row is the source of truth
+// for "is this cookie still valid". Logout deletes the row.
+type Session struct {
+	ID         string    `db:"id"`
+	UserID     int64     `db:"user_id"`
+	CreatedAt  time.Time `db:"created_at"`
+	LastSeenAt time.Time `db:"last_seen_at"`
+	ExpiresAt  time.Time `db:"expires_at"`
+	RememberMe bool      `db:"remember_me"`
+	UserAgent  string    `db:"user_agent"`
+	LastIP     string    `db:"last_ip"`
+}
 
 // User represents a user in the system
 type User struct {

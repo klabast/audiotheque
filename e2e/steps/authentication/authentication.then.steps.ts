@@ -71,6 +71,182 @@ Then('Reset code is logged to server console', async function (this: AudiodWorld
 	expect(this.resetCode).toMatch(/^[A-Z0-9]+$/);
 });
 
+// The session cookie's Max-Age is set from the server's window (30d default,
+// 90d remember-me). Playwright exposes `expires` as a unix timestamp;
+// compare against now() with a generous tolerance so the assertion isn't
+// fragile against minor clock skew or request latency.
+Then(
+	'Session is set to expire in approximately {int} days',
+	async function (this: AudiodWorld, days: number) {
+		const cookies = await this.getPage().context().cookies();
+		const sess = cookies.find((c) => c.name === 'audiod_token');
+		if (!sess) {
+			throw new Error('audiod_token cookie not set after login');
+		}
+		const nowSec = Date.now() / 1000;
+		const expectedSec = days * 86400;
+		const actualSec = sess.expires - nowSec;
+		// ±1 hour tolerance — generous enough for slow CI but tight enough to
+		// catch a 7-day vs 30-day vs 90-day misconfiguration.
+		const lower = expectedSec - 3600;
+		const upper = expectedSec + 3600;
+		if (actualSec < lower || actualSec > upper) {
+			throw new Error(
+				`Session cookie expires in ~${(actualSec / 86400).toFixed(2)}d; expected ~${days}d (got ${actualSec}s, window ${lower}..${upper}s)`
+			);
+		}
+	}
+);
+
+// After "Session is past the halfway point of its window" + an authenticated
+// request, the server should have bumped expires_at to ~30 days (default
+// window) and re-issued the cookie. Any value clearly above the "~1 minute"
+// state expire-soon left behind proves renewal happened — we assert at
+// least 24 days remaining as a robust lower bound.
+Then('Session expiry is renewed', async function (this: AudiodWorld) {
+	const cookies = await this.getPage().context().cookies();
+	const sess = cookies.find((c) => c.name === 'audiod_token');
+	if (!sess) {
+		throw new Error('audiod_token cookie missing after renewal step');
+	}
+	const remainingSec = sess.expires - Date.now() / 1000;
+	const minSec = 24 * 86400;
+	if (remainingSec < minSec) {
+		throw new Error(
+			`Session expects renewal: expires in ~${(remainingSec / 86400).toFixed(2)}d, expected ≥ 24d (sliding renewal did not fire)`
+		);
+	}
+});
+
+Then(
+	'User sees {int} active session',
+	async function (this: AudiodWorld, count: number) {
+		const page = this.getPage();
+		const rows = page.locator('[data-testid^="session-row-"]');
+		await expect(rows).toHaveCount(count);
+	}
+);
+
+Then(
+	'User sees {int} active sessions',
+	async function (this: AudiodWorld, count: number) {
+		const page = this.getPage();
+		const rows = page.locator('[data-testid^="session-row-"]');
+		await expect(rows).toHaveCount(count);
+	}
+);
+
+Then('Current session is marked as current', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const badges = page.locator('[data-testid="current-session-badge"]');
+	// Exactly one row should bear the "current" badge regardless of how many
+	// other sessions are listed.
+	await expect(badges).toHaveCount(1);
+});
+
+// "Remains logged in" checks that the named browser, after some destructive
+// action elsewhere, can still navigate to an authenticated page without
+// being kicked to /login. Goes to / (the library home) and asserts the URL
+// stays out of /login or /init.
+Then(
+	'Browser {string} remains logged in as {string}',
+	async function (this: AudiodWorld, browser: string, username: string) {
+		const page = this.getBrowser(browser);
+		await page.goto('/');
+		await expect(page).not.toHaveURL(/\/login/);
+		await expect(page).not.toHaveURL(/\/init/);
+		this.currentUser = username;
+	}
+);
+
+Then(
+	'Browser {string} is logged out',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		await expect(page).toHaveURL(/\/login/);
+	}
+);
+
+// "Logged out on next request" navigates the named browser to a protected
+// page and asserts the server bounces it to /login because its session row
+// was revoked from another browser.
+Then(
+	'Browser {string} is logged out on next request',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		await page.goto('/');
+		await page.waitForURL(/\/login/, { timeout: 5000 });
+	}
+);
+
+Then('User is prompted to confirm their password', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const modal = page.locator('[data-testid="logout-all-sudo-modal"]');
+	await expect(modal).toBeVisible();
+	await expect(page.locator('[data-testid="logout-all-sudo-password-input"]')).toBeVisible();
+});
+
+// After a wrong password, the modal stays open and shows an error. The user
+// is still on the Security settings page (no navigation happened).
+Then('Sudo confirmation is rejected', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const error = page.locator('[data-testid="logout-all-sudo-error"]');
+	await expect(error).toBeVisible();
+	await expect(page.locator('[data-testid="logout-all-sudo-modal"]')).toBeVisible();
+});
+
+Then(
+	'User remains logged in as {string}',
+	async function (this: AudiodWorld, username: string) {
+		const page = this.getPage();
+		await expect(page).not.toHaveURL(/\/login/);
+		await expect(page).not.toHaveURL(/\/init/);
+		this.currentUser = username;
+	}
+);
+
+Then('Weak password warning is shown', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const warning = page.locator('[data-testid="weak-password-warning"]');
+	await expect(warning).toBeVisible();
+});
+
+Then('Weak password warning is not shown', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const warning = page.locator('[data-testid="weak-password-warning"]');
+	await expect(warning).toBeHidden();
+});
+
+// --- Auth-disabled / re-enable assertions ---
+//
+// "Authentication is disabled" / "Authentication is enabled" are declared in
+// authentication.given.steps.ts as a single idempotent step (cucumber treats
+// Given/When/Then as the same matcher — see e2e/CLAUDE.md). The Given form
+// flips the toggle to the desired state; the Then form re-runs the same
+// check and short-circuits because the desired state is already in place.
+
+Then('User sees the disable-login warning', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const modal = page.locator('[data-testid="disable-auth-sudo-modal"]');
+	await expect(modal).toBeVisible();
+	// The warning is the modal's description — assert the password input is
+	// also present (it's the destructive-action gate).
+	await expect(
+		page.locator('[data-testid="disable-auth-sudo-password-input"]')
+	).toBeVisible();
+});
+
+Then(
+	'User management is unavailable with an explanation',
+	async function (this: AudiodWorld) {
+		const page = this.getPage();
+		const banner = page.locator('[data-testid="users-unavailable"]');
+		await expect(banner).toBeVisible();
+	}
+);
+
+// "Then User should see the login page" is owned by steps/system/system.then.steps.ts.
+
 Then(
 	'Reset code is generated for {string}',
 	{ timeout: 30000 },

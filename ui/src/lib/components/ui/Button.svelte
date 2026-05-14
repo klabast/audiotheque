@@ -4,7 +4,7 @@
 
 	interface Props extends HTMLButtonAttributes {
 		children: Snippet;
-		variant?: 'primary' | 'secondary' | 'ghost';
+		variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 		class?: string;
 	}
 
@@ -22,6 +22,13 @@
 	<button
 		{...props}
 		class="px-4 py-3 font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 bg-surface hover:bg-surface-hover text-text-primary focus:ring-surface focus:ring-offset-background {className}"
+	>
+		{@render children()}
+	</button>
+{:else if variant === 'danger'}
+	<button
+		{...props}
+		class="px-4 py-3 font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 bg-error hover:bg-error/90 text-white focus:ring-error focus:ring-offset-background {className}"
 	>
 		{@render children()}
 	</button>

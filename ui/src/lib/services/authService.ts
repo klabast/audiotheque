@@ -16,9 +16,13 @@ export interface AuthError {
 }
 
 export class AuthService {
-	async login(username: string, password: string): Promise<AuthUserResponse> {
+	async login(
+		username: string,
+		password: string,
+		rememberMe: boolean = false
+	): Promise<AuthUserResponse> {
 		try {
-			const response = await api.login(username, password);
+			const response = await api.login(username, password, rememberMe);
 			return response.user!;
 		} catch (error: unknown) {
 			// Extract error message from response

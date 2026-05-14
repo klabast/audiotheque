@@ -112,6 +112,47 @@ func (m *mockRepository) GetUserCount() (int, error) {
 	return len(m.users), nil
 }
 
+func (m *mockRepository) GetFirstAdmin() (*User, error) {
+	var lowest *User
+	for _, u := range m.users {
+		if !u.IsAdmin {
+			continue
+		}
+		if lowest == nil || u.ID < lowest.ID {
+			lowest = u
+		}
+	}
+	if lowest == nil {
+		return nil, ErrUserNotFound
+	}
+	return lowest, nil
+}
+
+func (m *mockRepository) ListUsers() ([]*User, error) {
+	users := make([]*User, 0, len(m.usersID))
+	for _, u := range m.usersID {
+		users = append(users, u)
+	}
+	for i := 0; i < len(users); i++ {
+		for j := i + 1; j < len(users); j++ {
+			if users[j].ID < users[i].ID {
+				users[i], users[j] = users[j], users[i]
+			}
+		}
+	}
+	return users, nil
+}
+
+func (m *mockRepository) Delete(userID int64) error {
+	u, ok := m.usersID[userID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	delete(m.usersID, userID)
+	delete(m.users, u.Username)
+	return nil
+}
+
 func newMockRepository() *mockRepository {
 	return &mockRepository{
 		users:      make(map[string]*User),
@@ -140,10 +181,10 @@ func TestLogin_ValidCredentials_ReturnsJWT(t *testing.T) {
 	repo.users["audiod"] = user
 	repo.usersID[1] = user
 
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Attempt login with correct credentials
-	token, user, err := service.Login("audiod", "audiod")
+	token, user, err := service.Login("audiod", "audiod", SessionContext{})
 
 	// Assert: Should return a JWT token and user without error
 	if err != nil {
@@ -171,10 +212,10 @@ func TestLogin_ValidCredentials_ReturnsJWT(t *testing.T) {
 func TestLogin_InvalidUsername_ReturnsError(t *testing.T) {
 	// Arrange
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Attempt login with non-existent user
-	token, user, err := service.Login("nonexistent", "password")
+	token, user, err := service.Login("nonexistent", "password", SessionContext{})
 
 	// Assert: Should return error
 	if err == nil {
@@ -212,10 +253,10 @@ func TestLogin_WrongPassword_ReturnsError(t *testing.T) {
 	repo.users["audiod"] = user
 	repo.usersID[1] = user
 
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Attempt login with wrong password
-	token, user, err := service.Login("audiod", "wrongpassword")
+	token, user, err := service.Login("audiod", "wrongpassword", SessionContext{})
 
 	// Assert: Should return error
 	if err == nil {
@@ -253,7 +294,7 @@ func TestUpdatePassword_ValidCurrentPassword_UpdatesPassword(t *testing.T) {
 	repo.users["testuser"] = user
 	repo.usersID[1] = user
 
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Update password
 	err = service.UpdatePassword(1, "oldpassword", "newpassword")
@@ -264,13 +305,13 @@ func TestUpdatePassword_ValidCurrentPassword_UpdatesPassword(t *testing.T) {
 	}
 
 	// Verify new password works for login
-	_, _, err = service.Login("testuser", "newpassword")
+	_, _, err = service.Login("testuser", "newpassword", SessionContext{})
 	if err != nil {
 		t.Errorf("expected login with new password to succeed, got error: %v", err)
 	}
 
 	// Verify old password no longer works
-	_, _, err = service.Login("testuser", "oldpassword")
+	_, _, err = service.Login("testuser", "oldpassword", SessionContext{})
 	if err == nil {
 		t.Error("expected login with old password to fail, but it succeeded")
 	}
@@ -280,7 +321,7 @@ func TestUpdatePassword_ValidCurrentPassword_UpdatesPassword(t *testing.T) {
 func TestRequestPasswordReset_GeneratesValidCode(t *testing.T) {
 	// Arrange: Create a user
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("oldpass")
 	user := &User{
@@ -320,7 +361,7 @@ func TestRequestPasswordReset_GeneratesValidCode(t *testing.T) {
 func TestRequestPasswordReset_SecondRequest_InvalidatesFirstCode(t *testing.T) {
 	// Arrange: Create user and get first reset code
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("oldpass")
 	user := &User{
@@ -357,7 +398,7 @@ func TestRequestPasswordReset_SecondRequest_InvalidatesFirstCode(t *testing.T) {
 func TestConfirmPasswordReset_ValidCode_SetsNewPassword(t *testing.T) {
 	// Arrange: Create user with old password, then get reset code
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("oldpassword")
 	user := &User{
@@ -390,13 +431,13 @@ func TestConfirmPasswordReset_ValidCode_SetsNewPassword(t *testing.T) {
 	}
 
 	// Should be able to login with new password
-	_, _, err = service.Login("alice", newPassword)
+	_, _, err = service.Login("alice", newPassword, SessionContext{})
 	if err != nil {
 		t.Errorf("expected login with new password to work, got error: %v", err)
 	}
 
 	// Should NOT be able to login with old password
-	_, _, err = service.Login("alice", "oldpassword")
+	_, _, err = service.Login("alice", "oldpassword", SessionContext{})
 	if err == nil {
 		t.Error("expected login with old password to fail, but it succeeded")
 	}
@@ -412,7 +453,7 @@ func TestConfirmPasswordReset_ValidCode_SetsNewPassword(t *testing.T) {
 func TestConfirmPasswordReset_InvalidCode_Fails(t *testing.T) {
 	// Arrange
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Try to confirm with invalid code
 	user, err := service.ConfirmPasswordReset("INVALID1", "newpass123")
@@ -431,7 +472,7 @@ func TestConfirmPasswordReset_InvalidCode_Fails(t *testing.T) {
 func TestConfirmPasswordReset_ExpiredCode_Fails(t *testing.T) {
 	// Arrange: Create user and reset code
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("oldpass")
 	user := &User{
@@ -465,7 +506,7 @@ func TestConfirmPasswordReset_ExpiredCode_Fails(t *testing.T) {
 func TestGetUserCount_ReturnsCorrectCount(t *testing.T) {
 	// Arrange
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Check count when no users
 	count, err := service.GetUserCount()
@@ -505,10 +546,10 @@ func TestGetUserCount_ReturnsCorrectCount(t *testing.T) {
 func TestCreateFirstUser_NoUsersExist_CreatesUser(t *testing.T) {
 	// Arrange
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Create first user
-	token, user, err := service.CreateFirstUser("alice", "alicepass123")
+	token, user, err := service.CreateFirstUser("alice", "alicepass123", SessionContext{})
 
 	// Assert: Should succeed and return user + token
 	if err != nil {
@@ -532,7 +573,7 @@ func TestCreateFirstUser_NoUsersExist_CreatesUser(t *testing.T) {
 	}
 
 	// Verify user can login with provided credentials
-	_, _, err = service.Login("alice", "alicepass123")
+	_, _, err = service.Login("alice", "alicepass123", SessionContext{})
 	if err != nil {
 		t.Errorf("expected login to succeed with new credentials, got error: %v", err)
 	}
@@ -542,7 +583,7 @@ func TestCreateFirstUser_NoUsersExist_CreatesUser(t *testing.T) {
 func TestCreateFirstUser_UsersExist_ReturnsError(t *testing.T) {
 	// Arrange: Create existing user
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("existingpass")
 	existingUser := &User{
@@ -555,7 +596,7 @@ func TestCreateFirstUser_UsersExist_ReturnsError(t *testing.T) {
 	repo.usersID[1] = existingUser
 
 	// Act: Try to create first user when users exist
-	token, user, err := service.CreateFirstUser("alice", "alicepass123")
+	token, user, err := service.CreateFirstUser("alice", "alicepass123", SessionContext{})
 
 	// Assert: Should fail
 	if err == nil {
@@ -575,7 +616,7 @@ func TestCreateFirstUser_UsersExist_ReturnsError(t *testing.T) {
 func TestCreateUser_InSetupMode_WithoutAdminFlag_ReturnsError(t *testing.T) {
 	// Arrange: No users exist (setup mode)
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Try to create user without admin flag
 	user, err := service.CreateUser("bob", "bobpass", false)
@@ -594,7 +635,7 @@ func TestCreateUser_InSetupMode_WithoutAdminFlag_ReturnsError(t *testing.T) {
 func TestCreateUser_InSetupMode_WithAdminFlag_CreatesAdmin(t *testing.T) {
 	// Arrange: No users exist (setup mode)
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Create admin user
 	user, err := service.CreateUser("alice", "alicepass", true)
@@ -621,7 +662,7 @@ func TestCreateUser_InSetupMode_WithAdminFlag_CreatesAdmin(t *testing.T) {
 func TestCreateUser_InNormalMode_CreatesNonAdminUser(t *testing.T) {
 	// Arrange: Admin user already exists
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("adminpass")
 	adminUser := &User{
@@ -654,7 +695,7 @@ func TestCreateUser_InNormalMode_CreatesNonAdminUser(t *testing.T) {
 	}
 
 	// Verify user can login
-	_, _, err = service.Login("bob", "bobpass")
+	_, _, err = service.Login("bob", "bobpass", SessionContext{})
 	if err != nil {
 		t.Errorf("expected login to succeed, got error: %v", err)
 	}
@@ -664,7 +705,7 @@ func TestCreateUser_InNormalMode_CreatesNonAdminUser(t *testing.T) {
 func TestCreateUser_InNormalMode_CreatesAdminUser(t *testing.T) {
 	// Arrange: Admin user already exists
 	repo := newMockRepository()
-	service := NewService(repo)
+	service := NewService(repo, NewInMemorySessionRepository())
 
 	passwordHash, _ := HashPassword("adminpass")
 	adminUser := &User{
@@ -694,5 +735,180 @@ func TestCreateUser_InNormalMode_CreatesAdminUser(t *testing.T) {
 
 	if !user.IsAdmin {
 		t.Error("expected user to be admin")
+	}
+}
+
+// TestGetCanonicalAdmin_ReturnsLowestIDAdmin verifies the helper returns the
+// first admin in id order — the deterministic "system" user that
+// auth-disabled mode resolves every request to.
+func TestGetCanonicalAdmin_ReturnsLowestIDAdmin(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	// Insert in non-ID order so we know the result wasn't "first inserted".
+	repo.users["bob"] = &User{ID: 5, Username: "bob", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[5] = repo.users["bob"]
+	repo.users["alice"] = &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[1] = repo.users["alice"]
+	repo.users["carol"] = &User{ID: 3, Username: "carol", PasswordHash: hash, IsAdmin: false}
+	repo.usersID[3] = repo.users["carol"]
+
+	u, err := service.GetCanonicalAdmin()
+	if err != nil {
+		t.Fatalf("GetCanonicalAdmin failed: %v", err)
+	}
+	if u.Username != "alice" {
+		t.Errorf("got %q, want alice (lowest-id admin)", u.Username)
+	}
+}
+
+// TestAuthEnabled_DefaultsTrue_WhenNoFnInjected verifies the auth.Service
+// reports auth as enabled when no AuthEnabledFn has been wired — i.e. unit
+// tests / CLI paths don't need to know about settings.
+func TestAuthEnabled_DefaultsTrue_WhenNoFnInjected(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	if !service.AuthEnabled() {
+		t.Error("AuthEnabled() = false; want true when no fn injected")
+	}
+}
+
+// TestAuthEnabled_DelegatesToInjectedFn verifies SetAuthEnabledFn wires the
+// settings service in; the Service stays decoupled from the settings package.
+func TestAuthEnabled_DelegatesToInjectedFn(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	enabled := true
+	service.SetAuthEnabledFn(func() (bool, error) { return enabled, nil })
+
+	if !service.AuthEnabled() {
+		t.Error("AuthEnabled() = false; want true when fn returns true")
+	}
+	enabled = false
+	if service.AuthEnabled() {
+		t.Error("AuthEnabled() = true; want false when fn returns false")
+	}
+}
+
+// --- User management (admin actions on other users) ---
+
+// TestListUsers_ReturnsAllUsers verifies the service exposes the full user
+// list — feeds the admin Users settings panel.
+func TestListUsers_ReturnsAllUsers(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	repo.users["alice"] = &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[1] = repo.users["alice"]
+	repo.users["bob"] = &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: false}
+	repo.usersID[2] = repo.users["bob"]
+
+	users, err := service.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	if len(users) != 2 {
+		t.Errorf("got %d users, want 2", len(users))
+	}
+}
+
+// TestDeleteUser_RemovesRow verifies the happy path — a different user is
+// deleted and disappears from the user list.
+func TestDeleteUser_RemovesRow(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	bob := &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: false}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	if err := service.DeleteUser(alice.ID, bob.ID); err != nil {
+		t.Fatalf("DeleteUser failed: %v", err)
+	}
+	if _, exists := repo.users["bob"]; exists {
+		t.Error("bob still in repo after delete")
+	}
+}
+
+// TestDeleteUser_RejectsSelfDelete verifies the actor can't delete their own
+// row — protects the admin from accidentally locking themselves out.
+func TestDeleteUser_RejectsSelfDelete(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+
+	if err := service.DeleteUser(alice.ID, alice.ID); err == nil {
+		t.Error("expected error when actor deletes themselves, got nil")
+	}
+	if _, exists := repo.users["alice"]; !exists {
+		t.Error("alice gone from repo despite self-delete rejection")
+	}
+}
+
+// TestDeleteUser_RejectsLastAdmin keeps the system from being orphaned by
+// deleting its last admin user.
+func TestDeleteUser_RejectsLastAdmin(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	alice := &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	bob := &User{ID: 2, Username: "bob", PasswordHash: hash, IsAdmin: true}
+	repo.users["alice"] = alice
+	repo.usersID[1] = alice
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	// alice deletes bob — fine, still one admin left
+	if err := service.DeleteUser(alice.ID, bob.ID); err != nil {
+		t.Fatalf("DeleteUser(alice→bob) failed: %v", err)
+	}
+
+	// Now alice is the sole admin; try to delete her from some hypothetical
+	// other admin context (use a different actor ID that doesn't trip the
+	// self-delete check).
+	if err := service.DeleteUser(99, alice.ID); err == nil {
+		t.Error("expected error when deleting last admin, got nil")
+	}
+	if _, exists := repo.users["alice"]; !exists {
+		t.Error("alice removed despite last-admin protection")
+	}
+}
+
+// TestAdminResetUserPassword_BypassesCurrentPasswordCheck verifies an admin
+// can change another user's password without knowing the old one (the
+// non-self UpdatePassword path requires the current password).
+func TestAdminResetUserPassword_BypassesCurrentPasswordCheck(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	oldHash, _ := HashPassword("bobOldPass1234")
+	bob := &User{ID: 2, Username: "bob", PasswordHash: oldHash, IsAdmin: false}
+	repo.users["bob"] = bob
+	repo.usersID[2] = bob
+
+	if err := service.AdminResetUserPassword(bob.ID, "bobNewPass1234"); err != nil {
+		t.Fatalf("AdminResetUserPassword failed: %v", err)
+	}
+
+	// Old password should no longer authenticate.
+	if _, err := service.Authenticate("bob", "bobOldPass1234"); err == nil {
+		t.Error("old password still works after reset")
+	}
+	// New password should authenticate.
+	if _, err := service.Authenticate("bob", "bobNewPass1234"); err != nil {
+		t.Errorf("new password rejected after reset: %v", err)
 	}
 }

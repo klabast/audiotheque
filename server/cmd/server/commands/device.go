@@ -63,8 +63,8 @@ Examples:
 
 		// Authenticate user
 		authRepo := auth.NewRepository(db)
-		authService := auth.NewService(authRepo)
-		_, authenticatedUser, err := authService.Login(username, password)
+		authService := auth.NewService(authRepo, nil)
+		authenticatedUser, err := authService.Authenticate(username, password)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
@@ -123,8 +123,8 @@ Examples:
 
 		// Authenticate user
 		authRepo := auth.NewRepository(db)
-		authService := auth.NewService(authRepo)
-		_, authenticatedUser, err := authService.Login(username, password)
+		authService := auth.NewService(authRepo, nil)
+		authenticatedUser, err := authService.Authenticate(username, password)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
@@ -196,8 +196,8 @@ Examples:
 
 		// Authenticate user
 		authRepo := auth.NewRepository(db)
-		authService := auth.NewService(authRepo)
-		_, authenticatedUser, err := authService.Login(username, password)
+		authService := auth.NewService(authRepo, nil)
+		authenticatedUser, err := authService.Authenticate(username, password)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
@@ -254,8 +254,8 @@ Examples:
 
 		// Authenticate user
 		authRepo := auth.NewRepository(db)
-		authService := auth.NewService(authRepo)
-		_, authenticatedUser, err := authService.Login(username, password)
+		authService := auth.NewService(authRepo, nil)
+		authenticatedUser, err := authService.Authenticate(username, password)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

@@ -84,3 +84,26 @@ When('User changes language to {string}', async function (this: AudiodWorld, lan
 	await page.click('[data-testid="save-settings-button"]');
 	await page.waitForLoadState('networkidle');
 });
+
+// Fill the change-password form but do NOT click submit. Used by weak-password
+// scenarios that need to assert the live warning is visible before submission.
+When(
+	'User starts changing password from {string} to {string}',
+	async function (this: AudiodWorld, oldPassword: string, newPassword: string) {
+		const page = this.getPage();
+		await page.goto('/settings/account');
+
+		await page.fill('[data-testid="current-password-input"]', oldPassword);
+		await page.fill('[data-testid="new-password-input"]', newPassword);
+		await page.fill('[data-testid="confirm-password-input"]', newPassword);
+
+		// Stash so a follow-up "User logs out / authenticates" chain knows the new password.
+		this.currentPassword = newPassword;
+	}
+);
+
+When('User submits the password change', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await page.click('[data-testid="change-password-button"]');
+	await page.waitForLoadState('networkidle');
+});

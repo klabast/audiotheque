@@ -113,9 +113,9 @@ class ApiService {
 		});
 	}
 
-	async login(username: string, password: string) {
+	async login(username: string, password: string, rememberMe: boolean = false) {
 		return authApi.login({
-			request: { username, password }
+			request: { username, password, rememberMe }
 		});
 	}
 
@@ -125,6 +125,33 @@ class ApiService {
 
 	async logout() {
 		return authApi.logout();
+	}
+
+	/**
+	 * Re-verify the current user's password without rotating the session.
+	 * Returns void on 204; throws (with a status-bearing error) otherwise.
+	 * Used by the SudoConfirmModal before sensitive operations.
+	 */
+	async verifyPassword(password: string) {
+		return authApi.verifyPassword({ request: { password } });
+	}
+
+	// --- Active sessions (Settings → Security) ----------------------------
+
+	async listSessions() {
+		return authApi.listSessions();
+	}
+
+	async revokeSession(publicId: string) {
+		return authApi.revokeSession({ publicId });
+	}
+
+	async revokeOtherSessions() {
+		return authApi.revokeOtherSessions();
+	}
+
+	async revokeAllSessions() {
+		return authApi.revokeAllSessions();
 	}
 
 	async checkSetupRequired() {
@@ -494,6 +521,72 @@ class ApiService {
 			body: JSON.stringify({ hostname })
 		});
 		await throwIfNotOk(response, 'Failed to update streaming settings');
+	}
+
+	// --- Settings: Authentication toggle ---
+
+	async getAuthEnabled(): Promise<boolean> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/settings/auth`, {
+			credentials: 'include'
+		});
+		await throwIfNotOk(response, 'Failed to load auth setting');
+		const body = (await response.json()) as { enabled: boolean };
+		return body.enabled;
+	}
+
+	async setAuthEnabled(enabled: boolean): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/settings/auth`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ enabled })
+		});
+		await throwIfNotOk(response, 'Failed to update auth setting');
+	}
+
+	// --- User management (admin) ---
+
+	async listUsers(): Promise<Array<{ id: number; username: string; is_admin: boolean }>> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users`, { credentials: 'include' });
+		await throwIfNotOk(response, 'Failed to load users');
+		const body = (await response.json()) as {
+			users: Array<{ id: number; username: string; is_admin: boolean }>;
+		};
+		return body.users ?? [];
+	}
+
+	async createUser(username: string, password: string, isAdmin: boolean = false): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ username, password, is_admin: isAdmin })
+		});
+		await throwIfNotOk(response, 'Failed to create user');
+	}
+
+	async deleteUser(id: number): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users/${id}`, {
+			method: 'DELETE',
+			credentials: 'include'
+		});
+		await throwIfNotOk(response, 'Failed to delete user');
+	}
+
+	async resetUserPassword(id: number, newPassword: string): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/users/${id}/password`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ new_password: newPassword })
+		});
+		await throwIfNotOk(response, 'Failed to reset user password');
 	}
 }
 

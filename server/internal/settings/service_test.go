@@ -164,3 +164,43 @@ func TestServiceStreamingHostnameSetGet(t *testing.T) {
 		t.Errorf("hostname = %q, want %q", hostname, "192.168.1.5:8080")
 	}
 }
+
+func TestServiceAuthEnabledDefaultsTrue(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewService(repo)
+
+	enabled, err := svc.IsAuthEnabled()
+	if err != nil {
+		t.Fatalf("IsAuthEnabled failed: %v", err)
+	}
+	if !enabled {
+		t.Error("IsAuthEnabled() = false, want true (default when row missing)")
+	}
+}
+
+func TestServiceAuthEnabledRoundTrip(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewService(repo)
+
+	if err := svc.SetAuthEnabled(false); err != nil {
+		t.Fatalf("SetAuthEnabled(false) failed: %v", err)
+	}
+	enabled, err := svc.IsAuthEnabled()
+	if err != nil {
+		t.Fatalf("IsAuthEnabled failed: %v", err)
+	}
+	if enabled {
+		t.Error("after SetAuthEnabled(false), IsAuthEnabled() = true, want false")
+	}
+
+	if err := svc.SetAuthEnabled(true); err != nil {
+		t.Fatalf("SetAuthEnabled(true) failed: %v", err)
+	}
+	enabled, err = svc.IsAuthEnabled()
+	if err != nil {
+		t.Fatalf("IsAuthEnabled failed: %v", err)
+	}
+	if !enabled {
+		t.Error("after SetAuthEnabled(true), IsAuthEnabled() = false, want true")
+	}
+}

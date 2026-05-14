@@ -50,7 +50,7 @@ Examples:
 
 		// Create service
 		repo := auth.NewRepository(db)
-		service := auth.NewService(repo)
+		service := auth.NewService(repo, nil)
 
 		// Call service layer
 		user, err := service.CreateUser(username, password, isAdmin)

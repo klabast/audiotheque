@@ -43,6 +43,12 @@ export class AudiodWorld extends World {
   extraContexts: Map<string, BrowserContext> = new Map();
   extraPages: Map<string, Page> = new Map();
 
+  // Per-username password lookup. `currentPassword` tracks "whoever was last
+  // mentioned"; this map keeps every user's password so scenarios that switch
+  // accounts (log out as alice, log in as bob, log out, log in as alice
+  // again) can resolve the right credential by name.
+  userPasswords: Map<string, string> = new Map();
+
   // Snapshot fields scenarios use to compare "before vs after" state.
   // Keeping them on the world avoids leaking module state between scenarios.
   preActionTrackId?: number;
@@ -93,6 +99,23 @@ export class AudiodWorld extends World {
       baseURL,
       ...deviceConfig,
       storageState,
+    });
+    const newPage = await newContext.newPage();
+    this.extraContexts.set(name, newContext);
+    this.extraPages.set(name, newPage);
+    return newPage;
+  }
+
+  /**
+   * Open a new browser context WITHOUT inheriting auth state from the
+   * primary context. Each context that calls /api/auth/login independently
+   * gets its own server-side session row — required for the Active Devices
+   * tests where two "different devices" must look different to the server.
+   */
+  async openFreshBrowser(name: string, sharedBrowser: Browser, deviceConfig: Record<string, unknown>, baseURL: string): Promise<Page> {
+    const newContext = await sharedBrowser.newContext({
+      baseURL,
+      ...deviceConfig,
     });
     const newPage = await newContext.newPage();
     this.extraContexts.set(name, newContext);

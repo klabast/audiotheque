@@ -119,7 +119,7 @@ func (h *Handler) HandleListLibraries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get authenticated user
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -179,7 +179,7 @@ func (h *Handler) HandleCreateLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get authenticated user and verify admin status
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -224,7 +224,7 @@ func (h *Handler) HandleScanLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get authenticated user and verify admin status
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -376,7 +376,7 @@ func (h *Handler) HandleDeleteLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get authenticated user and verify admin status
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -430,7 +430,7 @@ func (h *Handler) HandleUpdateLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get authenticated user and verify admin status
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
