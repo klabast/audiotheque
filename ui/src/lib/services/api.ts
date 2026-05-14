@@ -127,6 +127,24 @@ class ApiService {
 		return authApi.logout();
 	}
 
+	// --- Active sessions (Settings → Security) ----------------------------
+
+	async listSessions() {
+		return authApi.listSessions();
+	}
+
+	async revokeSession(publicId: string) {
+		return authApi.revokeSession({ publicId });
+	}
+
+	async revokeOtherSessions() {
+		return authApi.revokeOtherSessions();
+	}
+
+	async revokeAllSessions() {
+		return authApi.revokeAllSessions();
+	}
+
 	async checkSetupRequired() {
 		return authApi.isSetupRequired();
 	}

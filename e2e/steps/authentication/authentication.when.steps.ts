@@ -88,6 +88,88 @@ When(
 // authenticated API call to complete. That call is what triggers sliding-
 // renewal server-side; without waiting for it the next assertion races
 // the response that bumps expires_at and re-issues the cookie.
+// "Open active devices" navigates the named browser to the Security tab of
+// Settings, where the active-session rows are listed. Used by the Active
+// Devices scenarios.
+async function openSecuritySettings(page: import('@playwright/test').Page) {
+	await page.goto('/settings/security');
+	await page.waitForSelector('[data-testid="active-sessions-list"]', { timeout: 5000 });
+}
+
+When('User opens active devices in security settings', async function (this: AudiodWorld) {
+	await openSecuritySettings(this.getPage());
+});
+
+When(
+	'User on browser {string} opens active devices in security settings',
+	async function (this: AudiodWorld, browser: string) {
+		await openSecuritySettings(this.getBrowser(browser));
+	}
+);
+
+// On browser X's Security tab, find the row that ISN'T the current session
+// (i.e. belongs to some other browser) and click its ✕. The plan deliberately
+// avoids passing the specific public id from one test step to another —
+// "revoke the other session" is the user-visible semantic.
+When(
+	'User on browser {string} revokes the session on browser {string}',
+	async function (this: AudiodWorld, fromBrowser: string, _targetBrowser: string) {
+		const page = this.getBrowser(fromBrowser);
+		if (!page.url().includes('/settings/security')) {
+			await openSecuritySettings(page);
+		}
+		const rows = page.locator('[data-testid^="session-row-"]');
+		const count = await rows.count();
+		for (let i = 0; i < count; i++) {
+			const row = rows.nth(i);
+			const isCurrent =
+				(await row.locator('[data-testid="current-session-badge"]').count()) > 0;
+			if (!isCurrent) {
+				await row.locator('[data-testid^="revoke-session-"]').click();
+				await page.waitForResponse(
+					(r) => r.url().includes('/api/auth/sessions/') && r.request().method() === 'DELETE',
+					{ timeout: 5000 }
+				);
+				return;
+			}
+		}
+		throw new Error('No non-current session row found to revoke');
+	}
+);
+
+When(
+	'User on browser {string} logs out of all other devices',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		if (!page.url().includes('/settings/security')) {
+			await openSecuritySettings(page);
+		}
+		const respPromise = page.waitForResponse(
+			(r) => r.url().includes('/api/auth/sessions/revoke-others'),
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="logout-others-button"]');
+		await respPromise;
+	}
+);
+
+When(
+	'User on browser {string} logs out of all devices',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		if (!page.url().includes('/settings/security')) {
+			await openSecuritySettings(page);
+		}
+		const respPromise = page.waitForResponse(
+			(r) => r.url().includes('/api/auth/sessions/revoke-all'),
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="logout-all-button"]');
+		await respPromise;
+		await page.waitForURL(/\/login/, { timeout: 5000 });
+	}
+);
+
 When('User browses the library', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	// Wait for any authenticated /api/* call to complete — that's where the

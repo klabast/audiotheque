@@ -189,6 +189,45 @@ func (s *Service) DeleteSession(id string) error {
 	return s.sessions.Delete(id)
 }
 
+// ListUserSessions returns the user's active sessions, ordered most-recent
+// first. Used by the Active Devices UI in Settings → Security.
+func (s *Service) ListUserSessions(userID int64) ([]*Session, error) {
+	return s.sessions.ListForUser(userID)
+}
+
+// DeleteUserSessionByPublicID revokes a single session of userID, identified
+// by its API-safe public id (SHA-256 hash of the raw session id). Returns
+// ErrSessionNotFound if no matching session belongs to userID — callers
+// surface this as 404. We iterate the user's sessions rather than indexing
+// by hash because typical N is small (one user, a handful of devices) and
+// this avoids a new column / migration.
+func (s *Service) DeleteUserSessionByPublicID(userID int64, publicID string) error {
+	sessions, err := s.sessions.ListForUser(userID)
+	if err != nil {
+		return err
+	}
+	for _, sess := range sessions {
+		if SessionPublicID(sess.ID) == publicID {
+			return s.sessions.Delete(sess.ID)
+		}
+	}
+	return ErrSessionNotFound
+}
+
+// DeleteOtherUserSessions revokes every session of userID except keepID
+// ("log out of all other devices"). Cookie on the current browser stays
+// valid; every other browser sees its next authenticated request rejected.
+func (s *Service) DeleteOtherUserSessions(userID int64, keepID string) error {
+	return s.sessions.DeleteAllForUserExcept(userID, keepID)
+}
+
+// DeleteAllUserSessions revokes every session of userID, including the
+// caller's current one ("log out of all devices"). The HTTP handler should
+// follow up by clearing the response cookie.
+func (s *Service) DeleteAllUserSessions(userID int64) error {
+	return s.sessions.DeleteAllForUser(userID)
+}
+
 // CleanupExpiredSessions drops session rows whose expires_at has passed.
 // Intended for the background jobs runner.
 func (s *Service) CleanupExpiredSessions() (int64, error) {

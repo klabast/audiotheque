@@ -2,6 +2,48 @@ import { Given } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 import { AudiodWorld } from '../../support/world';
 import { runAudiodCli } from '../../support/audiod-cli';
+import {
+	getActiveDeviceConfig,
+	getBaseURL,
+	getSharedBrowser
+} from '../../support/hooks';
+import type { Page } from '@playwright/test';
+
+// Helper: log a browser tab in as username/password by going through the
+// real /login form. For browser "A" we reuse the primary page; any other
+// name spins up a fresh BrowserContext via openFreshBrowser so the server
+// sees a distinct session row (no storageState inheritance).
+async function loginOnBrowser(
+	world: AudiodWorld,
+	name: string,
+	username: string,
+	password: string
+): Promise<Page> {
+	let page: Page;
+	if (name === 'A' || name === 'a' || name === 'main') {
+		page = world.getPage();
+	} else {
+		const existing = world.extraPages.get(name);
+		if (existing) {
+			page = existing;
+		} else {
+			page = await world.openFreshBrowser(
+				name,
+				getSharedBrowser(),
+				getActiveDeviceConfig(),
+				getBaseURL()
+			);
+		}
+	}
+	await page.context().clearCookies();
+	await page.goto('/login');
+	await page.fill('[data-testid="username-input"]', username);
+	await page.fill('[data-testid="password-input"]', password);
+	await page.click('[data-testid="submit-login-button"]');
+	await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 5000 });
+	world.currentUser = username;
+	return page;
+}
 
 /**
  * Creates a user via CLI command
@@ -86,6 +128,17 @@ Given('Session is past the halfway point of its window', async function (this: A
 	}
 	runAudiodCli(`session expire-soon --username ${username}`);
 });
+
+// Multi-device step: log a named browser tab in independently. Each call
+// either reuses the named tab if it exists or opens a fresh context with
+// no inherited auth, so the server records a distinct session row per
+// browser. Used by the Active Devices scenarios.
+Given(
+	'User {string} is logged in on browser {string}',
+	async function (this: AudiodWorld, username: string, browser: string) {
+		await loginOnBrowser(this, browser, username, this.currentPassword || 'alicepass123');
+	}
+);
 
 Given('User is logged out', async function (this: AudiodWorld) {
 	const page = this.getPage();

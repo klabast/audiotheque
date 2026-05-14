@@ -99,6 +99,23 @@ export class AudiodWorld extends World {
     this.extraPages.set(name, newPage);
     return newPage;
   }
+
+  /**
+   * Open a new browser context WITHOUT inheriting auth state from the
+   * primary context. Each context that calls /api/auth/login independently
+   * gets its own server-side session row — required for the Active Devices
+   * tests where two "different devices" must look different to the server.
+   */
+  async openFreshBrowser(name: string, sharedBrowser: Browser, deviceConfig: Record<string, unknown>, baseURL: string): Promise<Page> {
+    const newContext = await sharedBrowser.newContext({
+      baseURL,
+      ...deviceConfig,
+    });
+    const newPage = await newContext.newPage();
+    this.extraContexts.set(name, newContext);
+    this.extraPages.set(name, newPage);
+    return newPage;
+  }
 }
 
 setWorldConstructor(AudiodWorld);

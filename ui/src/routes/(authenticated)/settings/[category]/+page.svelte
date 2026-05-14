@@ -9,9 +9,11 @@
 	import Library from '../Library.svelte';
 	import Devices from '../Devices.svelte';
 	import Streaming from '../Streaming.svelte';
+	import Security from '../Security.svelte';
 
 	const tabs: TabItem[] = [
 		{ label: m['settings.tabs.account'](), value: 'account' },
+		{ label: m['settings.tabs.security'](), value: 'security' },
 		{ label: m['settings.tabs.general'](), value: 'general' },
 		{ label: m['settings.tabs.library'](), value: 'library' },
 		{ label: m['settings.tabs.devices'](), value: 'devices' },
@@ -30,6 +32,8 @@
 		{#snippet children(tabValue)}
 			{#if tabValue === 'account'}
 				<Account />
+			{:else if tabValue === 'security'}
+				<Security />
 			{:else if tabValue === 'general'}
 				<General />
 			{:else if tabValue === 'library'}

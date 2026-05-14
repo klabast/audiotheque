@@ -2,12 +2,24 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
 )
+
+// SessionPublicID derives an API-safe identifier from a session ID by
+// hashing it. Stable (same session.id → same public id) so it can be used
+// in URLs without exposing the raw cookie value. Required because the
+// session.id IS the cookie; returning it in JSON would let XSS steal it
+// even though the cookie itself is HttpOnly. 128 bits of the SHA-256
+// output gives plenty of collision resistance for a per-user list.
+func SessionPublicID(sessionID string) string {
+	h := sha256.Sum256([]byte(sessionID))
+	return base64.RawURLEncoding.EncodeToString(h[:16])
+}
 
 // SessionIDByteLength is the entropy of a session ID before base64-encoding.
 // 32 bytes = 256 bits of randomness; cookie value ends up ~43 chars.
@@ -32,6 +44,8 @@ type SessionRepository interface {
 	UpdateExpiry(id string, lastSeenAt, expiresAt time.Time, lastIP string) error
 	Delete(id string) error
 	DeleteAllForUser(userID int64) error
+	DeleteAllForUserExcept(userID int64, exceptID string) error
+	ListForUser(userID int64) ([]*Session, error)
 	DeleteExpired(now time.Time) (int64, error)
 }
 
@@ -109,6 +123,43 @@ func (r *sessionRepository) DeleteAllForUser(userID int64) error {
 	return nil
 }
 
+func (r *sessionRepository) DeleteAllForUserExcept(userID int64, exceptID string) error {
+	//language=SQL
+	query := `DELETE FROM session WHERE user_id = ? AND id != ?`
+	_, err := r.db.Exec(query, userID, exceptID)
+	if err != nil {
+		return fmt.Errorf("session delete all for user except: %w", err)
+	}
+	return nil
+}
+
+func (r *sessionRepository) ListForUser(userID int64) ([]*Session, error) {
+	//language=SQL
+	query := `
+SELECT id, user_id, created_at, last_seen_at, expires_at, remember_me, user_agent, last_ip
+FROM session
+WHERE user_id = ?
+ORDER BY last_seen_at DESC`
+	rows, err := r.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("session list for user: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []*Session
+	for rows.Next() {
+		s := &Session{}
+		if err := rows.Scan(&s.ID, &s.UserID, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt, &s.RememberMe, &s.UserAgent, &s.LastIP); err != nil {
+			return nil, fmt.Errorf("session list scan: %w", err)
+		}
+		sessions = append(sessions, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("session list rows: %w", err)
+	}
+	return sessions, nil
+}
+
 func (r *sessionRepository) DeleteExpired(now time.Time) (int64, error) {
 	//language=SQL
 	query := `DELETE FROM session WHERE expires_at < ?`
@@ -170,6 +221,26 @@ func (m *inMemorySessionRepository) DeleteAllForUser(userID int64) error {
 		}
 	}
 	return nil
+}
+
+func (m *inMemorySessionRepository) DeleteAllForUserExcept(userID int64, exceptID string) error {
+	for id, s := range m.sessions {
+		if s.UserID == userID && id != exceptID {
+			delete(m.sessions, id)
+		}
+	}
+	return nil
+}
+
+func (m *inMemorySessionRepository) ListForUser(userID int64) ([]*Session, error) {
+	var sessions []*Session
+	for _, s := range m.sessions {
+		if s.UserID == userID {
+			copy := *s
+			sessions = append(sessions, &copy)
+		}
+	}
+	return sessions, nil
 }
 
 func (m *inMemorySessionRepository) DeleteExpired(now time.Time) (int64, error) {

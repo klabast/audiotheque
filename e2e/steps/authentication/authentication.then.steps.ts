@@ -118,6 +118,67 @@ Then('Session expiry is renewed', async function (this: AudiodWorld) {
 	}
 });
 
+Then(
+	'User sees {int} active session',
+	async function (this: AudiodWorld, count: number) {
+		const page = this.getPage();
+		const rows = page.locator('[data-testid^="session-row-"]');
+		await expect(rows).toHaveCount(count);
+	}
+);
+
+Then(
+	'User sees {int} active sessions',
+	async function (this: AudiodWorld, count: number) {
+		const page = this.getPage();
+		const rows = page.locator('[data-testid^="session-row-"]');
+		await expect(rows).toHaveCount(count);
+	}
+);
+
+Then('Current session is marked as current', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const badges = page.locator('[data-testid="current-session-badge"]');
+	// Exactly one row should bear the "current" badge regardless of how many
+	// other sessions are listed.
+	await expect(badges).toHaveCount(1);
+});
+
+// "Remains logged in" checks that the named browser, after some destructive
+// action elsewhere, can still navigate to an authenticated page without
+// being kicked to /login. Goes to / (the library home) and asserts the URL
+// stays out of /login or /init.
+Then(
+	'Browser {string} remains logged in as {string}',
+	async function (this: AudiodWorld, browser: string, username: string) {
+		const page = this.getBrowser(browser);
+		await page.goto('/');
+		await expect(page).not.toHaveURL(/\/login/);
+		await expect(page).not.toHaveURL(/\/init/);
+		this.currentUser = username;
+	}
+);
+
+Then(
+	'Browser {string} is logged out',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		await expect(page).toHaveURL(/\/login/);
+	}
+);
+
+// "Logged out on next request" navigates the named browser to a protected
+// page and asserts the server bounces it to /login because its session row
+// was revoked from another browser.
+Then(
+	'Browser {string} is logged out on next request',
+	async function (this: AudiodWorld, browser: string) {
+		const page = this.getBrowser(browser);
+		await page.goto('/');
+		await page.waitForURL(/\/login/, { timeout: 5000 });
+	}
+);
+
 Then('Weak password warning is shown', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	const warning = page.locator('[data-testid="weak-password-warning"]');
