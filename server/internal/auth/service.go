@@ -19,6 +19,10 @@ type Repository interface {
 	GetByID(id int64) (*User, error)
 	GetUserCount() (int, error)
 	GetAdminCount() (int, error)
+	// GetFirstAdmin returns the lowest-id admin user — the canonical "system"
+	// admin that auth-disabled mode resolves every request to. Returns
+	// ErrUserNotFound if no admin exists.
+	GetFirstAdmin() (*User, error)
 	Create(username, passwordHash string, isAdmin bool) (*User, error)
 	UpdatePassword(userID int64, newPasswordHash string) error
 
@@ -32,8 +36,9 @@ type Repository interface {
 
 // Service handles authentication business logic
 type Service struct {
-	repo     Repository
-	sessions SessionRepository
+	repo          Repository
+	sessions      SessionRepository
+	authEnabledFn func() (bool, error)
 }
 
 // NewService creates a new auth service. The session repository may be nil
@@ -42,6 +47,36 @@ type Service struct {
 // construct the Service with a real SessionRepository.
 func NewService(repo Repository, sessions SessionRepository) *Service {
 	return &Service{repo: repo, sessions: sessions}
+}
+
+// SetAuthEnabledFn wires the settings-backed auth-enabled lookup. Kept as a
+// setter rather than a constructor arg so the auth package stays free of any
+// dependency on the settings package (cmd/server is the only thing that knows
+// about both). When unset, AuthEnabled() returns true — the safe default.
+func (s *Service) SetAuthEnabledFn(fn func() (bool, error)) {
+	s.authEnabledFn = fn
+}
+
+// AuthEnabled reports whether this instance currently requires browser auth.
+// Errors from the injected fn are treated as "enabled" so a DB hiccup never
+// silently opens the app up.
+func (s *Service) AuthEnabled() bool {
+	if s.authEnabledFn == nil {
+		return true
+	}
+	enabled, err := s.authEnabledFn()
+	if err != nil {
+		return true
+	}
+	return enabled
+}
+
+// GetCanonicalAdmin returns the lowest-id admin user. Auth-disabled mode
+// resolves every authenticated handler to this user, so the rest of the
+// system continues to see a User pointer (audit logs, ownership checks,
+// etc.) without conditional plumbing.
+func (s *Service) GetCanonicalAdmin() (*User, error) {
+	return s.repo.GetFirstAdmin()
 }
 
 // SessionContext carries the request metadata recorded on a new session.

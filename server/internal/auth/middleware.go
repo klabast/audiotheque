@@ -40,7 +40,14 @@ func clientIP(r *http.Request) string {
 // instead, which re-issues the cookie so renewal is visible client-side.
 // This shorter form stays for the WebSocket upgrade path (which only owns
 // the request) and any caller that explicitly doesn't want cookie writes.
+//
+// When auth is disabled (Service.AuthEnabled() == false) the cookie is
+// ignored entirely and the canonical admin is returned — see auth-disabled
+// mode in §7 of the auth-rework roadmap.
 func GetAuthenticatedUser(r *http.Request, service *Service) (*User, error) {
+	if !service.AuthEnabled() {
+		return service.GetCanonicalAdmin()
+	}
 	user, _, err := getAuthenticatedUserAndSession(r, service)
 	return user, err
 }
@@ -49,7 +56,13 @@ func GetAuthenticatedUser(r *http.Request, service *Service) (*User, error) {
 // the audiod_token cookie on success, so the browser's Max-Age tracks the
 // session's (possibly bumped) expires_at. HTTP handlers should prefer this
 // over GetAuthenticatedUser.
+//
+// In auth-disabled mode there is no session to renew, so no Set-Cookie is
+// written — the canonical admin is returned as-is.
 func AuthenticateRequest(w http.ResponseWriter, r *http.Request, service *Service) (*User, error) {
+	if !service.AuthEnabled() {
+		return service.GetCanonicalAdmin()
+	}
 	user, sess, err := getAuthenticatedUserAndSession(r, service)
 	if err != nil {
 		return nil, err

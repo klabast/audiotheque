@@ -6,12 +6,19 @@
 	import { Alert, Button, SudoConfirmModal } from '$lib/components/ui';
 	import { X } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
+	import { APP_NAME } from '$lib/branding';
 
 	let sessions: AuthSessionInfo[] = $state([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
 	let showLogoutAllSudo = $state(false);
+
+	// Authentication-enabled toggle. Loaded alongside sessions on mount so
+	// the section reflects the current state without a flicker.
+	let authEnabled = $state(true);
+	let showDisableAuthSudo = $state(false);
+	let showEnableAuthSudo = $state(false);
 
 	async function refresh() {
 		try {
@@ -22,8 +29,18 @@
 		}
 	}
 
+	async function refreshAuthEnabled() {
+		try {
+			authEnabled = await api.getAuthEnabled();
+		} catch {
+			// Surface failure as the safe default — UI shows "login required",
+			// matching server-side fail-safe behaviour.
+			authEnabled = true;
+		}
+	}
+
 	onMount(async () => {
-		await refresh();
+		await Promise.all([refresh(), refreshAuthEnabled()]);
 		loading = false;
 	});
 
@@ -114,12 +131,70 @@
 			error = e instanceof Error ? e.message : m['settings.security.error_revoke']();
 		}
 	}
+
+	// Disabling login is destructive in a different sense — it opens the app
+	// up to anyone on the network. We gate the action behind the sudo modal
+	// with copy that doubles as the warning dialog (see scenarios in
+	// features/authentication/auth-disabled.feature).
+	function startDisableAuth() {
+		showDisableAuthSudo = true;
+	}
+
+	async function confirmDisableAuth() {
+		showDisableAuthSudo = false;
+		try {
+			await api.setAuthEnabled(false);
+			authEnabled = false;
+		} catch (e) {
+			error = e instanceof Error ? e.message : m['settings.security.error_revoke']();
+		}
+	}
+
+	function startEnableAuth() {
+		showEnableAuthSudo = true;
+	}
+
+	async function confirmEnableAuth() {
+		showEnableAuthSudo = false;
+		try {
+			await api.setAuthEnabled(true);
+			// Re-enabling means subsequent requests need a real session — the
+			// current "pseudo-admin" had none. Hop to /login proactively rather
+			// than wait for a 401 to surface mid-render.
+			await goto('/login');
+		} catch (e) {
+			error = e instanceof Error ? e.message : m['settings.security.error_revoke']();
+		}
+	}
 </script>
 
 <div class="space-y-6">
 	<div>
 		<h2 class="text-text-primary text-2xl font-bold">{m['settings.security.title']()}</h2>
 		<p class="text-text-secondary mt-1 text-sm">{m['settings.security.subtitle']()}</p>
+	</div>
+
+	<div class="card-bordered" data-testid="auth-toggle-section">
+		<h3 class="text-text-primary mb-1 text-lg font-semibold">
+			{m['settings.security.auth_section']()}
+		</h3>
+		<p class="text-text-secondary mb-4 text-sm">
+			{m['settings.security.auth_section_subtitle']({ appName: APP_NAME })}
+		</p>
+		<p class="text-text-primary mb-4 text-sm" data-testid="auth-toggle-status">
+			{authEnabled
+				? m['settings.security.auth_status_enabled']()
+				: m['settings.security.auth_status_disabled']()}
+		</p>
+		{#if authEnabled}
+			<Button data-testid="disable-auth-button" onclick={startDisableAuth} variant="danger">
+				{m['settings.security.disable_login_button']()}
+			</Button>
+		{:else}
+			<Button data-testid="enable-auth-button" onclick={startEnableAuth} variant="primary">
+				{m['settings.security.enable_login_button']()}
+			</Button>
+		{/if}
 	</div>
 
 	<div class="card-bordered">
@@ -205,4 +280,24 @@
 	onConfirm={logOutAll}
 	testidPrefix="logout-all-sudo"
 	title={m['settings.security.logout_all_title']()}
+/>
+
+<SudoConfirmModal
+	confirmLabel={m['settings.security.disable_login_button']()}
+	description={m['settings.security.disable_login_warning_body']()}
+	isOpen={showDisableAuthSudo}
+	onCancel={() => (showDisableAuthSudo = false)}
+	onConfirm={confirmDisableAuth}
+	testidPrefix="disable-auth-sudo"
+	title={m['settings.security.disable_login_warning_title']()}
+/>
+
+<SudoConfirmModal
+	confirmLabel={m['settings.security.enable_login_button']()}
+	description={m['settings.security.enable_login_body']()}
+	isOpen={showEnableAuthSudo}
+	onCancel={() => (showEnableAuthSudo = false)}
+	onConfirm={confirmEnableAuth}
+	testidPrefix="enable-auth-sudo"
+	title={m['settings.security.enable_login_title']()}
 />

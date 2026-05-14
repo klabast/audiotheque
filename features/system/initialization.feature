@@ -26,3 +26,10 @@ Feature: System Initialization
   Scenario: Application redirects to init when initialization required
     When User visits any page
     Then User should see the initialization page
+
+  @wip
+  Scenario: First admin creates an account and disables login at setup
+    Given User is on the initialization page
+    When User creates account with username "alice" and password "alicepass123" and disables login
+    Then User should be logged in as "alice"
+    And Authentication is disabled

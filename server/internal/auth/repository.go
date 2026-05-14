@@ -109,6 +109,43 @@ func (r *repository) GetAdminCount() (int, error) {
 	return count, nil
 }
 
+// GetFirstAdmin returns the lowest-id admin row. Used by auth-disabled mode
+// to resolve every request to a deterministic "system" admin so downstream
+// code (audit logs, ownership) still sees a real user pointer. Returns
+// ErrUserNotFound when no admin exists (which in practice means the system
+// hasn't been initialized).
+func (r *repository) GetFirstAdmin() (*User, error) {
+	//language=SQL
+	query := `
+SELECT id,
+       username,
+       password_hash,
+       is_admin,
+       created_at,
+       updated_at
+FROM user
+WHERE is_admin = 1
+ORDER BY id ASC
+LIMIT 1`
+
+	user := &User{}
+	err := r.db.QueryRow(query).Scan(
+		&user.ID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.IsAdmin,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
 // Create creates a new user
 func (r *repository) Create(username, passwordHash string, isAdmin bool) (*User, error) {
 	//language=SQL

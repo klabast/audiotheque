@@ -102,6 +102,22 @@ func (m *mockAuthRepository) GetAdminCount() (int, error) {
 	return count, nil
 }
 
+func (m *mockAuthRepository) GetFirstAdmin() (*auth.User, error) {
+	var lowest *auth.User
+	for _, u := range m.users {
+		if !u.IsAdmin {
+			continue
+		}
+		if lowest == nil || u.ID < lowest.ID {
+			lowest = u
+		}
+	}
+	if lowest == nil {
+		return nil, auth.ErrUserNotFound
+	}
+	return lowest, nil
+}
+
 func (m *mockAuthRepository) Create(username, passwordHash string, isAdmin bool) (*auth.User, error) {
 	return nil, nil
 }

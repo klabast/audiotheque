@@ -522,6 +522,29 @@ class ApiService {
 		});
 		await throwIfNotOk(response, 'Failed to update streaming settings');
 	}
+
+	// --- Settings: Authentication toggle ---
+
+	async getAuthEnabled(): Promise<boolean> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/settings/auth`, {
+			credentials: 'include'
+		});
+		await throwIfNotOk(response, 'Failed to load auth setting');
+		const body = (await response.json()) as { enabled: boolean };
+		return body.enabled;
+	}
+
+	async setAuthEnabled(enabled: boolean): Promise<void> {
+		const basePath = apiConfig.basePath ?? '';
+		const response = await fetch(`${basePath}/settings/auth`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ enabled })
+		});
+		await throwIfNotOk(response, 'Failed to update auth setting');
+	}
 }
 
 export const api = new ApiService();

@@ -27,6 +27,14 @@ func (m *mockAuthRepository) GetByID(id int64) (*auth.User, error) {
 func (m *mockAuthRepository) GetByUsername(string) (*auth.User, error)   { return nil, auth.ErrUserNotFound }
 func (m *mockAuthRepository) GetUserCount() (int, error)                 { return len(m.users), nil }
 func (m *mockAuthRepository) GetAdminCount() (int, error)                { return 1, nil }
+func (m *mockAuthRepository) GetFirstAdmin() (*auth.User, error) {
+	for _, u := range m.users {
+		if u.IsAdmin {
+			return u, nil
+		}
+	}
+	return nil, auth.ErrUserNotFound
+}
 func (m *mockAuthRepository) Create(string, string, bool) (*auth.User, error) { return nil, nil }
 func (m *mockAuthRepository) UpdatePassword(int64, string) error         { return nil }
 func (m *mockAuthRepository) StoreResetCode(string, int64, time.Time) error { return nil }
@@ -82,6 +90,9 @@ type mockSettingsService struct {
 	deleteErr         error
 	streamingHostname string
 	streamingErr      error
+	authEnabled       bool
+	authEnabledSet    bool // tracks whether SetAuthEnabled was called
+	authErr           error
 }
 
 func (m *mockSettingsService) CreateDevice(name, deviceType, address string) (*Device, error) {
@@ -121,6 +132,25 @@ func (m *mockSettingsService) SetStreamingHostname(hostname string) error {
 		return m.streamingErr
 	}
 	m.streamingHostname = hostname
+	return nil
+}
+
+func (m *mockSettingsService) IsAuthEnabled() (bool, error) {
+	if m.authErr != nil {
+		return false, m.authErr
+	}
+	if !m.authEnabledSet {
+		return true, nil // default
+	}
+	return m.authEnabled, nil
+}
+
+func (m *mockSettingsService) SetAuthEnabled(enabled bool) error {
+	if m.authErr != nil {
+		return m.authErr
+	}
+	m.authEnabled = enabled
+	m.authEnabledSet = true
 	return nil
 }
 
@@ -288,5 +318,80 @@ func TestHandleDevices_Unauthenticated(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleGetAuth_DefaultsTrue(t *testing.T) {
+	svc := &mockSettingsService{}
+	h := NewHandler(svc, createTestAuthService())
+
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/auth", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !body.Enabled {
+		t.Errorf("expected enabled=true by default")
+	}
+}
+
+func TestHandleSetAuth_AdminCanDisable(t *testing.T) {
+	svc := &mockSettingsService{}
+	h := NewHandler(svc, createTestAuthService())
+
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/settings/auth",
+		strings.NewReader(`{"enabled":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !svc.authEnabledSet || svc.authEnabled {
+		t.Errorf("SetAuthEnabled(false) was not invoked correctly; set=%v enabled=%v",
+			svc.authEnabledSet, svc.authEnabled)
+	}
+}
+
+func TestHandleSetAuth_Unauthenticated(t *testing.T) {
+	svc := &mockSettingsService{}
+	h := NewHandler(svc, createTestAuthService())
+
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/settings/auth",
+		strings.NewReader(`{"enabled":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	// No auth cookie attached.
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+	if svc.authEnabledSet {
+		t.Errorf("SetAuthEnabled should not have been called for unauth'd request")
 	}
 }

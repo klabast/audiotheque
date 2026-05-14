@@ -15,6 +15,8 @@ type ServiceInterface interface {
 	DeleteDevice(id string) error
 	GetStreamingHostname() (string, error)
 	SetStreamingHostname(hostname string) error
+	IsAuthEnabled() (bool, error)
+	SetAuthEnabled(enabled bool) error
 }
 
 type Handler struct {
@@ -36,6 +38,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/settings/devices/{id}", h.HandleDeleteDevice)
 	mux.HandleFunc("GET /api/settings/streaming", h.HandleGetStreaming)
 	mux.HandleFunc("PUT /api/settings/streaming", h.HandleSetStreaming)
+	mux.HandleFunc("GET /api/settings/auth", h.HandleGetAuth)
+	mux.HandleFunc("PUT /api/settings/auth", h.HandleSetAuth)
 }
 
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.User, error) {
@@ -212,6 +216,81 @@ func (h *Handler) HandleGetStreaming(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(streamingResponse{Hostname: hostname}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+type authSettingResponse struct {
+	Enabled bool `json:"enabled"`
+}
+
+type setAuthRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// HandleGetAuth handles GET /api/settings/auth
+// @Summary Get authentication-required setting
+// @Description Reports whether browser login is currently required. Admin-only.
+// @Tags settings
+// @Produce json
+// @Success 200 {object} authSettingResponse
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/auth [get]
+func (h *Handler) HandleGetAuth(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.requireAdmin(w, r); err != nil {
+		if err == auth.ErrForbidden {
+			http.Error(w, err.Error(), http.StatusForbidden)
+		} else {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		}
+		return
+	}
+	enabled, err := h.service.IsAuthEnabled()
+	if err != nil {
+		http.Error(w, "failed to read auth setting", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(authSettingResponse{Enabled: enabled}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleSetAuth handles PUT /api/settings/auth
+// @Summary Set authentication-required setting
+// @Description Toggle whether browser login is required. Admin-only. The
+// @Description frontend gates this behind a sudo (re-confirm-password) modal
+// @Description when disabling — sudo is enforced at the modal layer via
+// @Description POST /auth/verify-password, not here.
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param request body setAuthRequest true "auth setting"
+// @Success 200 {object} authSettingResponse
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/auth [put]
+func (h *Handler) HandleSetAuth(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.requireAdmin(w, r); err != nil {
+		if err == auth.ErrForbidden {
+			http.Error(w, err.Error(), http.StatusForbidden)
+		} else {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		}
+		return
+	}
+	var req setAuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.service.SetAuthEnabled(req.Enabled); err != nil {
+		http.Error(w, "failed to save auth setting", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(authSettingResponse{Enabled: req.Enabled}); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }

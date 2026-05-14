@@ -112,6 +112,22 @@ func (m *mockRepository) GetUserCount() (int, error) {
 	return len(m.users), nil
 }
 
+func (m *mockRepository) GetFirstAdmin() (*User, error) {
+	var lowest *User
+	for _, u := range m.users {
+		if !u.IsAdmin {
+			continue
+		}
+		if lowest == nil || u.ID < lowest.ID {
+			lowest = u
+		}
+	}
+	if lowest == nil {
+		return nil, ErrUserNotFound
+	}
+	return lowest, nil
+}
+
 func newMockRepository() *mockRepository {
 	return &mockRepository{
 		users:      make(map[string]*User),
@@ -694,5 +710,60 @@ func TestCreateUser_InNormalMode_CreatesAdminUser(t *testing.T) {
 
 	if !user.IsAdmin {
 		t.Error("expected user to be admin")
+	}
+}
+
+// TestGetCanonicalAdmin_ReturnsLowestIDAdmin verifies the helper returns the
+// first admin in id order — the deterministic "system" user that
+// auth-disabled mode resolves every request to.
+func TestGetCanonicalAdmin_ReturnsLowestIDAdmin(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	hash, _ := HashPassword("pw")
+	// Insert in non-ID order so we know the result wasn't "first inserted".
+	repo.users["bob"] = &User{ID: 5, Username: "bob", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[5] = repo.users["bob"]
+	repo.users["alice"] = &User{ID: 1, Username: "alice", PasswordHash: hash, IsAdmin: true}
+	repo.usersID[1] = repo.users["alice"]
+	repo.users["carol"] = &User{ID: 3, Username: "carol", PasswordHash: hash, IsAdmin: false}
+	repo.usersID[3] = repo.users["carol"]
+
+	u, err := service.GetCanonicalAdmin()
+	if err != nil {
+		t.Fatalf("GetCanonicalAdmin failed: %v", err)
+	}
+	if u.Username != "alice" {
+		t.Errorf("got %q, want alice (lowest-id admin)", u.Username)
+	}
+}
+
+// TestAuthEnabled_DefaultsTrue_WhenNoFnInjected verifies the auth.Service
+// reports auth as enabled when no AuthEnabledFn has been wired — i.e. unit
+// tests / CLI paths don't need to know about settings.
+func TestAuthEnabled_DefaultsTrue_WhenNoFnInjected(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	if !service.AuthEnabled() {
+		t.Error("AuthEnabled() = false; want true when no fn injected")
+	}
+}
+
+// TestAuthEnabled_DelegatesToInjectedFn verifies SetAuthEnabledFn wires the
+// settings service in; the Service stays decoupled from the settings package.
+func TestAuthEnabled_DelegatesToInjectedFn(t *testing.T) {
+	repo := newMockRepository()
+	service := NewService(repo, NewInMemorySessionRepository())
+
+	enabled := true
+	service.SetAuthEnabledFn(func() (bool, error) { return enabled, nil })
+
+	if !service.AuthEnabled() {
+		t.Error("AuthEnabled() = false; want true when fn returns true")
+	}
+	enabled = false
+	if service.AuthEnabled() {
+		t.Error("AuthEnabled() = true; want false when fn returns false")
 	}
 }

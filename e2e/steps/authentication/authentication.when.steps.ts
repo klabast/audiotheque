@@ -269,6 +269,74 @@ When('User enters valid reset code', async function (this: AudiodWorld) {
 	await page.fill('[data-testid="reset-code-input"]', this.resetCode!);
 });
 
+// --- Auth-disabled / re-enable flow ---
+//
+// "User navigates to the application" is owned by system/system.when.steps.ts —
+// keep a single definition there (cucumber treats duplicate matchers as
+// ambiguous).
+
+When('User opens user management in settings', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await page.goto('/settings/users');
+	await page.waitForLoadState('networkidle');
+});
+
+When('User attempts to disable authentication', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	if (!page.url().includes('/settings/security')) {
+		await page.goto('/settings/security');
+		await page.waitForSelector('[data-testid="auth-toggle-section"]', { timeout: 5000 });
+	}
+	await page.click('[data-testid="disable-auth-button"]');
+	await page.waitForSelector('[data-testid="disable-auth-sudo-modal"]', { timeout: 5000 });
+});
+
+When('User cancels the disable-login warning', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await page.click('[data-testid="disable-auth-sudo-cancel-button"]');
+});
+
+When(
+	'User confirms the disable-login warning with password {string}',
+	async function (this: AudiodWorld, password: string) {
+		const page = this.getPage();
+		await page.fill('[data-testid="disable-auth-sudo-password-input"]', password);
+		const putAuth = page.waitForResponse(
+			(r) =>
+				r.url().includes('/api/settings/auth') && r.request().method() === 'PUT',
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="disable-auth-sudo-confirm-button"]');
+		await putAuth.catch(() => {
+			// Surfaced by the assertion that follows.
+		});
+		await page.waitForLoadState('networkidle').catch(() => {});
+	}
+);
+
+When(
+	'User re-enables authentication with password {string}',
+	async function (this: AudiodWorld, password: string) {
+		const page = this.getPage();
+		if (!page.url().includes('/settings/security')) {
+			await page.goto('/settings/security');
+			await page.waitForSelector('[data-testid="auth-toggle-section"]', { timeout: 5000 });
+		}
+		await page.click('[data-testid="enable-auth-button"]');
+		await page.waitForSelector('[data-testid="enable-auth-sudo-modal"]', { timeout: 5000 });
+		await page.fill('[data-testid="enable-auth-sudo-password-input"]', password);
+		const putAuth = page.waitForResponse(
+			(r) =>
+				r.url().includes('/api/settings/auth') && r.request().method() === 'PUT',
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="enable-auth-sudo-confirm-button"]');
+		await putAuth.catch(() => {});
+		// Re-enable hops to /login automatically — wait for that.
+		await page.waitForURL(/\/login/, { timeout: 5000 }).catch(() => {});
+	}
+);
+
 When('User resets password to {string}', async function (this: AudiodWorld, newPassword: string) {
 	const page = this.getPage();
 	await page.fill('[data-testid="new-password-input"]', newPassword);

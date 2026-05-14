@@ -174,3 +174,47 @@ Given(
 		this.currentUser = undefined;
 	}
 );
+
+// Drives the auth-enabled toggle directly via the settings API. The step is
+// the canonical Given/Then per CLAUDE.md guidance: cucumber matches one
+// definition per phrase regardless of keyword, so a single function ensures
+// the state (idempotent set-if-needed) AND asserts it at the end. Used as
+// Given it sets up; used as Then it short-circuits if the previous step
+// already produced the state, but still verifies — catching regressions
+// where the prior When silently no-op'd.
+async function ensureAuthEnabled(page: Page, want: boolean): Promise<void> {
+	const get1 = await page.request.get('/api/settings/auth');
+	if (!get1.ok()) {
+		throw new Error(`GET /api/settings/auth failed: ${get1.status()}`);
+	}
+	const current = (await get1.json()) as { enabled: boolean };
+	if (current.enabled !== want) {
+		const put = await page.request.put('/api/settings/auth', {
+			headers: { 'Content-Type': 'application/json' },
+			data: { enabled: want }
+		});
+		if (!put.ok()) {
+			throw new Error(
+				`PUT /api/settings/auth failed: ${put.status()} ${await put.text()}`
+			);
+		}
+	}
+	// Re-read to confirm the state took. This is what makes the step useful
+	// as a Then assertion — a prior When that should have flipped the toggle
+	// but didn't will surface here even though the set-if-needed branch
+	// would otherwise paper over it.
+	const get2 = await page.request.get('/api/settings/auth');
+	if (!get2.ok()) {
+		throw new Error(`GET /api/settings/auth failed (verify): ${get2.status()}`);
+	}
+	const after = (await get2.json()) as { enabled: boolean };
+	expect(after.enabled).toBe(want);
+}
+
+Given('Authentication is disabled', async function (this: AudiodWorld) {
+	await ensureAuthEnabled(this.getPage(), false);
+});
+
+Given('Authentication is enabled', async function (this: AudiodWorld) {
+	await ensureAuthEnabled(this.getPage(), true);
+});

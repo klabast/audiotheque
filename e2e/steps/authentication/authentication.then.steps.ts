@@ -217,6 +217,36 @@ Then('Weak password warning is not shown', async function (this: AudiodWorld) {
 	await expect(warning).toBeHidden();
 });
 
+// --- Auth-disabled / re-enable assertions ---
+//
+// "Authentication is disabled" / "Authentication is enabled" are declared in
+// authentication.given.steps.ts as a single idempotent step (cucumber treats
+// Given/When/Then as the same matcher — see e2e/CLAUDE.md). The Given form
+// flips the toggle to the desired state; the Then form re-runs the same
+// check and short-circuits because the desired state is already in place.
+
+Then('User sees the disable-login warning', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const modal = page.locator('[data-testid="disable-auth-sudo-modal"]');
+	await expect(modal).toBeVisible();
+	// The warning is the modal's description — assert the password input is
+	// also present (it's the destructive-action gate).
+	await expect(
+		page.locator('[data-testid="disable-auth-sudo-password-input"]')
+	).toBeVisible();
+});
+
+Then(
+	'User management is unavailable with an explanation',
+	async function (this: AudiodWorld) {
+		const page = this.getPage();
+		const banner = page.locator('[data-testid="users-unavailable"]');
+		await expect(banner).toBeVisible();
+	}
+);
+
+// "Then User should see the login page" is owned by steps/system/system.then.steps.ts.
+
 Then(
 	'Reset code is generated for {string}',
 	{ timeout: 30000 },
