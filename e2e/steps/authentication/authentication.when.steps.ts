@@ -25,11 +25,10 @@ When(
 	}
 );
 
-// "...without keeping logged in" mirrors the default login flow today — there
-// is no "Keep me logged in" checkbox in this slice. Once the checkbox lands
-// (next slice), this step ensures it is unchecked before submission. The
-// existing 30-day session expiry assertion is what differentiates this from
-// the future "...and keeps logged in" variant (90-day window).
+// "...without keeping logged in" explicitly ensures the "Keep me logged in"
+// checkbox is unchecked before submitting the login form. Differentiates
+// the 30-day default-window assertion from the 90-day remember-me variant
+// (the "...and keeps logged in" step below).
 When(
 	'User authenticates with username {string} and password {string} without keeping logged in',
 	async function (this: AudiodWorld, username: string, password: string) {
@@ -42,12 +41,9 @@ When(
 		await page.fill('[data-testid="username-input"]', username);
 		await page.fill('[data-testid="password-input"]', password);
 
-		// "keep me logged in" checkbox may not exist yet; if present, ensure unchecked.
 		const keep = page.locator('[data-testid="keep-logged-in-checkbox"]');
-		if ((await keep.count()) > 0) {
-			if (await keep.isChecked()) {
-				await keep.uncheck();
-			}
+		if (await keep.isChecked()) {
+			await keep.uncheck();
 		}
 
 		await page.click('[data-testid="submit-login-button"]');
@@ -60,6 +56,52 @@ When(
 		this.currentUser = username;
 	}
 );
+
+// "...and keeps logged in" checks the persistent-session checkbox before
+// submitting. Server then issues a 90-day cookie window instead of the
+// 30-day default.
+When(
+	'User authenticates with username {string} and password {string} and keeps logged in',
+	async function (this: AudiodWorld, username: string, password: string) {
+		const page = this.getPage();
+
+		if (!page.url().includes('/login')) {
+			await page.goto('/login');
+		}
+
+		await page.fill('[data-testid="username-input"]', username);
+		await page.fill('[data-testid="password-input"]', password);
+		await page.check('[data-testid="keep-logged-in-checkbox"]');
+
+		await page.click('[data-testid="submit-login-button"]');
+
+		await Promise.race([
+			page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 3000 }).catch(() => {}),
+			page.waitForSelector('[data-testid="login-error"]', { timeout: 3000 }).catch(() => {})
+		]);
+
+		this.currentUser = username;
+	}
+);
+
+// Navigates the page to "/" (the library home) and waits for the first
+// authenticated API call to complete. That call is what triggers sliding-
+// renewal server-side; without waiting for it the next assertion races
+// the response that bumps expires_at and re-issues the cookie.
+When('User browses the library', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	// Wait for any authenticated /api/* call to complete — that's where the
+	// session lookup happens and the renewal cookie gets re-issued.
+	const apiCall = page.waitForResponse(
+		(r) => r.url().includes('/api/') && !r.url().includes('/api/system'),
+		{ timeout: 5000 }
+	);
+	await page.goto('/');
+	await apiCall.catch(() => {
+		// If no API call fires within timeout, the assertion that follows
+		// will surface the real issue (cookie not refreshed).
+	});
+});
 
 When(
 	'User changes username to {string} and password to {string}',

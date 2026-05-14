@@ -128,33 +128,57 @@ func (s *Service) CreateSession(userID int64, ctx SessionContext) (string, error
 	return id, nil
 }
 
-// ValidateSession resolves a cookie value to its user. Returns ErrUnauthorized
-// (via ErrSessionNotFound translated up the stack) for unknown or expired
-// sessions, and lazily deletes the row when expired.
+// ValidateSession resolves a cookie value to its user and the (possibly
+// renewed) session row. The session's last_seen_at and last_ip are updated
+// on every successful call. When less than half the configured window
+// remains, expires_at is bumped to now + window (sliding renewal). Callers
+// that hold a ResponseWriter should re-Set-Cookie after this returns so
+// the browser's cookie expiry tracks the bumped row.
 //
-// This slice does NOT implement sliding renewal — the caller (middleware)
-// gets back the user but expires_at is not bumped. Renewal lands in the
-// follow-up slice that activates the @wip "continued use renews the
-// window" scenario.
-func (s *Service) ValidateSession(id string) (*User, error) {
+// Returns ErrSessionNotFound for unknown or expired sessions, and lazily
+// deletes the row when expired.
+func (s *Service) ValidateSession(id, ip string) (*User, *Session, error) {
 	if id == "" {
-		return nil, ErrSessionNotFound
+		return nil, nil, ErrSessionNotFound
 	}
 	sess, err := s.sessions.GetByID(id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if time.Now().UTC().After(sess.ExpiresAt) {
+	now := time.Now().UTC()
+	if now.After(sess.ExpiresAt) {
 		// Best-effort cleanup; ignore delete errors so we always return the
 		// right auth signal to the caller.
 		_ = s.sessions.Delete(id)
-		return nil, ErrSessionNotFound
+		return nil, nil, ErrSessionNotFound
 	}
+
+	// Sliding renewal: bump expires_at when less than half the window remains.
+	// Window is determined per-session by remember_me so the two TTLs (30d /
+	// 90d) renew consistently with the original login choice.
+	window := SessionWindowDefault
+	if sess.RememberMe {
+		window = SessionWindowRemember
+	}
+	newExpiresAt := sess.ExpiresAt
+	if sess.ExpiresAt.Sub(now) < window/2 {
+		newExpiresAt = now.Add(window)
+	}
+
+	// Per §7 of the roadmap, every authenticated request updates last_seen_at
+	// and last_ip. UpdateExpiry failures are logged but not fatal — auth
+	// must still succeed so the user isn't kicked out by a transient DB hiccup.
+	if err := s.sessions.UpdateExpiry(id, now, newExpiresAt, ip); err == nil {
+		sess.LastSeenAt = now
+		sess.ExpiresAt = newExpiresAt
+		sess.LastIP = ip
+	}
+
 	user, err := s.repo.GetByID(sess.UserID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return user, nil
+	return user, sess, nil
 }
 
 // DeleteSession removes a single session row (logout from one device).

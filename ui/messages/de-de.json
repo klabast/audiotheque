@@ -23,6 +23,8 @@
 	"auth.login.button": "Anmelden",
 	"auth.login.button_submitting": "Wird angemeldet...",
 	"auth.login.forgot_password": "Passwort vergessen?",
+	"auth.login.keep_logged_in": "Angemeldet bleiben",
+	"auth.login.keep_logged_in_hint": "Du bleibst angemeldet, solange du {appName} nutzt. Sensible Aktionen wie das Ändern des Passworts erfordern weiterhin eine Bestätigung.",
 	"auth.login.subtitle": "Melden Sie sich bei Ihrem Musikserver an",
 	"common.change_password": "Passwort ändern",
 	"common.changing_password": "Passwort wird geändert...",

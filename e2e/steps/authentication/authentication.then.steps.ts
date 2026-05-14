@@ -98,6 +98,26 @@ Then(
 	}
 );
 
+// After "Session is past the halfway point of its window" + an authenticated
+// request, the server should have bumped expires_at to ~30 days (default
+// window) and re-issued the cookie. Any value clearly above the "~1 minute"
+// state expire-soon left behind proves renewal happened — we assert at
+// least 24 days remaining as a robust lower bound.
+Then('Session expiry is renewed', async function (this: AudiodWorld) {
+	const cookies = await this.getPage().context().cookies();
+	const sess = cookies.find((c) => c.name === 'audiod_token');
+	if (!sess) {
+		throw new Error('audiod_token cookie missing after renewal step');
+	}
+	const remainingSec = sess.expires - Date.now() / 1000;
+	const minSec = 24 * 86400;
+	if (remainingSec < minSec) {
+		throw new Error(
+			`Session expects renewal: expires in ~${(remainingSec / 86400).toFixed(2)}d, expected ≥ 24d (sliding renewal did not fire)`
+		);
+	}
+});
+
 Then('Weak password warning is shown', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	const warning = page.locator('[data-testid="weak-password-warning"]');

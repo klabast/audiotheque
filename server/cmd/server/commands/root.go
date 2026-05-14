@@ -58,6 +58,7 @@ func init() {
 	rootCmd.AddCommand(userCmd)
 	rootCmd.AddCommand(systemCmd)
 	rootCmd.AddCommand(deviceCmd)
+	rootCmd.AddCommand(sessionCmd)
 
 	// Add completion command
 	rootCmd.AddCommand(completionCmd)

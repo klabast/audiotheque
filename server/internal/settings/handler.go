@@ -38,8 +38,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/settings/streaming", h.HandleSetStreaming)
 }
 
-func (h *Handler) requireAdmin(r *http.Request) (*auth.User, error) {
-	user, err := auth.GetAuthenticatedUser(r, h.authService)
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.User, error) {
+	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (h *Handler) requireAdmin(r *http.Request) (*auth.User, error) {
 
 // HandleListDevices handles GET /api/settings/devices
 func (h *Handler) HandleListDevices(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
@@ -80,7 +80,7 @@ type createDeviceRequest struct {
 
 // HandleCreateDevice handles POST /api/settings/devices
 func (h *Handler) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
@@ -123,7 +123,7 @@ type updateDeviceRequest struct {
 
 // HandleUpdateDevice handles PUT /api/settings/devices/{id}
 func (h *Handler) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
@@ -162,7 +162,7 @@ func (h *Handler) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 // HandleDeleteDevice handles DELETE /api/settings/devices/{id}
 func (h *Handler) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
@@ -195,7 +195,7 @@ type setStreamingRequest struct {
 
 // HandleGetStreaming handles GET /api/settings/streaming
 func (h *Handler) HandleGetStreaming(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {
@@ -218,7 +218,7 @@ func (h *Handler) HandleGetStreaming(w http.ResponseWriter, r *http.Request) {
 
 // HandleSetStreaming handles PUT /api/settings/streaming
 func (h *Handler) HandleSetStreaming(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(r); err != nil {
+	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {

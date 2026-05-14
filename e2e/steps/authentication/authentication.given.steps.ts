@@ -75,6 +75,18 @@ Given('User {string} is logged in', async function (this: AudiodWorld, username:
 	this.currentUser = username;
 });
 
+// Forces the current user's sessions to expire in ~1 minute via the
+// `audiod session expire-soon` CLI fixture. Putting the session in the
+// "less than half the window remains" zone guarantees the next
+// authenticated request fires sliding-renewal in Service.ValidateSession.
+Given('Session is past the halfway point of its window', async function (this: AudiodWorld) {
+	const username = this.currentUser;
+	if (!username) {
+		throw new Error('No current user set — log in before invoking this step');
+	}
+	runAudiodCli(`session expire-soon --username ${username}`);
+});
+
 Given('User is logged out', async function (this: AudiodWorld) {
 	const page = this.getPage();
 

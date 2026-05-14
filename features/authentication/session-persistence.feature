@@ -14,14 +14,12 @@ Feature: Session Persistence
     Then User should be logged in as "alice"
     And Session is set to expire in approximately 30 days
 
-  @wip
   Scenario: "Keep me logged in" extends the session window to about 90 days
     Given User is on login page
     When User authenticates with username "alice" and password "alicepass123" and keeps logged in
     Then User should be logged in as "alice"
     And Session is set to expire in approximately 90 days
 
-  @wip
   Scenario: Continued use renews the session window
     Given User "alice" is logged in
     And Session is past the halfway point of its window

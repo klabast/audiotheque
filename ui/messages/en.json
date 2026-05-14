@@ -23,6 +23,8 @@
 	"auth.login.button": "Sign in",
 	"auth.login.button_submitting": "Signing in...",
 	"auth.login.forgot_password": "Forgot password?",
+	"auth.login.keep_logged_in": "Keep me logged in",
+	"auth.login.keep_logged_in_hint": "Stays signed in as long as you use {appName}. Sensitive actions like changing your password still require it.",
 	"auth.login.subtitle": "Sign in to your music server",
 	"common.change_password": "Change Password",
 	"common.changing_password": "Changing Password...",

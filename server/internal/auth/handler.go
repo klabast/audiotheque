@@ -2,7 +2,6 @@ package auth
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -213,7 +212,7 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve the session cookie to a user. Unknown / expired → 401.
-	user, err := userFromSessionCookie(r, h.service)
+	user, err := userFromSessionCookie(w, r, h.service)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -254,7 +253,7 @@ func (h *Handler) HandleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve the session cookie to a user.
-	user, err := userFromSessionCookie(r, h.service)
+	user, err := userFromSessionCookie(w, r, h.service)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -470,25 +469,11 @@ func (h *Handler) HandleSetupRequired(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// userFromSessionCookie is the single source of truth for "who is the user
-// behind this request" used by /me and PUT /password. The auth middleware
-// uses GetAuthenticatedUser directly; this helper exists so the handler
-// methods that ran their own JWT decode previously can switch without
-// growing duplicate code paths.
-func userFromSessionCookie(r *http.Request, service *Service) (*User, error) {
-	cookie, err := r.Cookie("audiod_token")
-	if err != nil {
-		return nil, ErrUnauthorized
-	}
-	user, err := service.ValidateSession(cookie.Value)
-	if err != nil {
-		if errors.Is(err, ErrSessionNotFound) {
-			return nil, ErrUnauthorized
-		}
-		log.Printf("Session lookup failed: %v", err)
-		return nil, ErrUnauthorized
-	}
-	return user, nil
+// userFromSessionCookie wraps AuthenticateRequest so HandleMe + HandleUpdate
+// Password keep their concise inline auth-check call. Sliding renewal +
+// cookie refresh happen inside AuthenticateRequest.
+func userFromSessionCookie(w http.ResponseWriter, r *http.Request, service *Service) (*User, error) {
+	return AuthenticateRequest(w, r, service)
 }
 
 type SetupRequest struct {

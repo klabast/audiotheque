@@ -113,9 +113,9 @@ class ApiService {
 		});
 	}
 
-	async login(username: string, password: string) {
+	async login(username: string, password: string, rememberMe: boolean = false) {
 		return authApi.login({
-			request: { username, password }
+			request: { username, password, rememberMe }
 		});
 	}
 
