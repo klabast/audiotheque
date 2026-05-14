@@ -18,6 +18,8 @@
 	"auth.forgot_password.title": "Passwort zurücksetzen",
 	"auth.init.button": "Konto erstellen",
 	"auth.init.button_submitting": "Konto wird erstellt...",
+	"auth.init.disable_login": "Anmeldung auf diesem Gerät überspringen",
+	"auth.init.disable_login_hint": "Die Anmeldemaske komplett deaktivieren. Nur in einem vertrauenswürdigen Heimnetzwerk verwenden — wer diesen Server erreichen kann, wird als du angemeldet.",
 	"auth.init.subtitle": "Erstellen Sie Ihr Admin-Konto, um loszulegen",
 	"auth.init.title": "Willkommen bei {appName}",
 	"auth.login.button": "Anmelden",

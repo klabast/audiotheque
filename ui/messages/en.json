@@ -18,6 +18,8 @@
 	"auth.forgot_password.title": "Reset your password",
 	"auth.init.button": "Create Account",
 	"auth.init.button_submitting": "Creating Account...",
+	"auth.init.disable_login": "Skip login on this device",
+	"auth.init.disable_login_hint": "Turn off the login screen entirely. Use only on a trusted home network — anyone who can reach this server will be signed in as you.",
 	"auth.init.subtitle": "Create your admin account to get started",
 	"auth.init.title": "Welcome to {appName}",
 	"auth.login.button": "Sign in",

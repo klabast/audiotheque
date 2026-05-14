@@ -17,6 +17,36 @@ When('User creates account with username {string} and password {string}', async 
 	this.currentUser = username;
 });
 
+// Same as the no-toggle variant above, but ticks the "Skip login on this
+// device" checkbox before submit. The init page handles disabling auth in
+// a follow-up request after the admin row lands; we just wait for the post-
+// submit nav so subsequent steps see the toggled state.
+When(
+	'User creates account with username {string} and password {string} and disables login',
+	async function (this: AudiodWorld, username: string, password: string) {
+		const page = this.getPage();
+
+		await page.fill('[data-testid="username-input"]', username);
+		await page.fill('[data-testid="password-input"]', password);
+		await page.fill('[data-testid="confirm-password-input"]', password);
+		await page.check('[data-testid="disable-login-checkbox"]');
+		// Wait for the PUT /api/settings/auth that fires after the setup
+		// call returns — without it the next assertion races the toggle.
+		const authPut = page.waitForResponse(
+			(r) =>
+				r.url().includes('/api/settings/auth') && r.request().method() === 'PUT',
+			{ timeout: 5000 }
+		);
+		await page.click('[data-testid="submit-init-button"]');
+		await authPut.catch(() => {
+			// Surfaced by the assertion that follows.
+		});
+		await page.waitForURL((url) => !url.pathname.includes('/init'), { timeout: 5000 });
+
+		this.currentUser = username;
+	}
+);
+
 When('User attempts to access the initialization page', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	await page.goto('/init');

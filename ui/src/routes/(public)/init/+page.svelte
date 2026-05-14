@@ -23,6 +23,7 @@
 	let username = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
+	let disableLogin = $state(false);
 	let submitting = $state(false);
 	let error = $state('');
 
@@ -55,6 +56,14 @@
 
 		try {
 			await authService.createFirstUser(username, password);
+
+			// "Skip login on this device" at setup turns the auth toggle off
+			// immediately after the admin row lands. Two requests, but the
+			// browser is already authenticated as the new admin (the setup
+			// endpoint sets the cookie) so the PUT goes through cleanly.
+			if (disableLogin) {
+				await api.setAuthEnabled(false);
+			}
 
 			// Backend sets httpOnly cookie, reload session to update auth store
 			await auth.initializeSession();
@@ -154,6 +163,24 @@
 						type="password"
 						data-testid="confirm-password-input"
 					/>
+				</div>
+
+				<div>
+					<label class="text-text-primary flex items-start gap-2 text-sm">
+						<input
+							bind:checked={disableLogin}
+							class="mt-0.5"
+							data-testid="disable-login-checkbox"
+							disabled={submitting}
+							type="checkbox"
+						/>
+						<span class="flex flex-col">
+							<span>{m['auth.init.disable_login']()}</span>
+							<span class="text-text-secondary mt-0.5 text-xs">
+								{m['auth.init.disable_login_hint']()}
+							</span>
+						</span>
+					</label>
 				</div>
 			</div>
 
