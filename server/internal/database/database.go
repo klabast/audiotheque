@@ -38,6 +38,18 @@ func Open() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// SQLite is a single-writer DB; the modernc.org driver's PRAGMAs (notably
+	// busy_timeout) are also per-connection. With Go's default pool, only the
+	// first connection inherits the PRAGMAs we run below — every additional
+	// connection the pool spins up gets fresh defaults (busy_timeout=0),
+	// which is why a concurrent scanner worker + a handler write surfaced as
+	// instant SQLITE_BUSY → HTTP 500 in CI. Pinning to a single connection
+	// lets database/sql serialize callers in Go (each request waits its turn)
+	// instead of racing through multiple un-tuned SQLite connections.
+	// The existing test memory ("sqlite :memory: needs single-conn pool in
+	// tests") flags the same gotcha — production has the same shape.
+	db.SetMaxOpenConns(1)
+
 	// Enable foreign key constraints
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
@@ -49,7 +61,8 @@ func Open() (*sql.DB, error) {
 	}
 
 	// Wait up to 5s for the write lock instead of returning SQLITE_BUSY
-	// immediately. Lets the server and CLI cooperate on the same DB.
+	// immediately. Lets the server and CLI cooperate on the same DB (CLI
+	// opens its own connection from a separate process).
 	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
 		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
 	}
