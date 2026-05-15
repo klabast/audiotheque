@@ -261,17 +261,22 @@
 
 <!-- Full-screen mobile player -->
 {#if isFullScreenOpen}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 bg-surface-alt flex flex-col transition-transform duration-300"
 		style="transform: translateY({currentY}px)"
-		ontouchstart={handleTouchStart}
-		ontouchmove={handleTouchMove}
-		ontouchend={handleTouchEnd}
 		data-testid="player-fullscreen"
 	>
-		<!-- Header with collapse handle -->
-		<div class="flex justify-center pt-3 pb-2">
+		<!-- Header with collapse handle. Swipe-to-dismiss lives on this strip
+		     only — putting it on the whole sheet would steal touch events from
+		     the scrollable controls below (notably the device picker on short
+		     phones, where the content overflows). -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="flex-shrink-0 flex justify-center pt-3 pb-2"
+			ontouchstart={handleTouchStart}
+			ontouchmove={handleTouchMove}
+			ontouchend={handleTouchEnd}
+		>
 			<button
 				class="w-10 h-1 bg-text-muted/30 rounded-full"
 				onclick={onCloseFullScreen}
@@ -279,92 +284,100 @@
 			></button>
 		</div>
 
-		<!-- Album art - large and centered -->
-		<div class="flex-1 flex items-center justify-center px-8 pt-4">
-			<div
-				class="w-full aspect-square max-w-[340px] rounded-xl overflow-hidden shadow-2xl bg-surface"
-			>
-				{#if albumCover}
-					<img src={albumCover} alt="Album cover" class="w-full h-full object-cover" />
-				{/if}
-			</div>
-		</div>
-
-		<!-- Track info -->
-		<div class="px-8 pt-8 pb-4">
-			<div class="flex items-start justify-between gap-4">
-				<div class="min-w-0 flex-1">
-					<div class="text-xl font-bold text-text-primary truncate">{trackTitle}</div>
-					<div class="text-base text-text-secondary truncate">{trackArtist}</div>
-					{#if trackAlbum}
-						<div class="text-sm text-text-muted truncate">{trackAlbum}</div>
+		<!-- Scrollable content. On iPhone SE-class screens the album art + all
+		     the controls don't fit; without overflow-y-auto the device picker
+		     ends up below the viewport and the user is stranded on a remote
+		     device with no way back. -->
+		<div class="flex-1 min-h-0 overflow-y-auto flex flex-col">
+			<!-- Album art - large and centered. h-full + max-h lets it shrink
+			     on short screens so the controls below stay reachable. -->
+			<div class="flex-1 min-h-[140px] flex items-center justify-center px-8 pt-4">
+				<div
+					class="aspect-square h-full max-h-[340px] rounded-xl overflow-hidden shadow-2xl bg-surface"
+				>
+					{#if albumCover}
+						<img src={albumCover} alt="Album cover" class="w-full h-full object-cover" />
 					{/if}
 				</div>
-				<button class="player-btn-mobile" aria-label="Add to favorites">
-					<div class="i-lucide-heart w-6 h-6"></div>
+			</div>
+
+			<!-- Track info -->
+			<div class="px-8 pt-8 pb-4 flex-shrink-0">
+				<div class="flex items-start justify-between gap-4">
+					<div class="min-w-0 flex-1">
+						<div class="text-xl font-bold text-text-primary truncate">{trackTitle}</div>
+						<div class="text-base text-text-secondary truncate">{trackArtist}</div>
+						{#if trackAlbum}
+							<div class="text-sm text-text-muted truncate">{trackAlbum}</div>
+						{/if}
+					</div>
+					<button class="player-btn-mobile" aria-label="Add to favorites">
+						<div class="i-lucide-heart w-6 h-6"></div>
+					</button>
+				</div>
+			</div>
+
+			<!-- Seek bar -->
+			<div class="px-8 pb-6 flex-shrink-0">
+				<AudSeekBar
+					{currentTime}
+					{duration}
+					{onSeek}
+					showTimes={true}
+					showThumb="always"
+					testId="seek-bar-fullscreen"
+				/>
+			</div>
+
+			<!-- Playback controls -->
+			<div class="px-8 pb-8 flex items-center justify-center gap-8 flex-shrink-0">
+				<button
+					class="player-btn-mobile-lg"
+					onclick={onPrevious}
+					aria-label="Previous track"
+					data-testid="previous-button-fullscreen"
+				>
+					<div class="i-lucide-skip-back w-8 h-8"></div>
+				</button>
+				<button
+					class="player-btn-mobile-play"
+					onclick={onPlayPause}
+					aria-label={paused ? playLabel : pauseLabel}
+					data-testid="play-pause-button-fullscreen"
+				>
+					{#if paused}
+						<div class="i-lucide-play w-9 h-9 ml-1"></div>
+					{:else}
+						<div class="i-lucide-pause w-9 h-9"></div>
+					{/if}
+				</button>
+				<button
+					class="player-btn-mobile-lg"
+					onclick={onNext}
+					aria-label="Next track"
+					data-testid="next-button-fullscreen"
+				>
+					<div class="i-lucide-skip-forward w-8 h-8"></div>
 				</button>
 			</div>
-		</div>
 
-		<!-- Seek bar -->
-		<div class="px-8 pb-6">
-			<AudSeekBar
-				{currentTime}
-				{duration}
-				{onSeek}
-				showTimes={true}
-				showThumb="always"
-				testId="seek-bar-fullscreen"
-			/>
-		</div>
+			<!-- Volume -->
+			<div class="px-8 pb-6 flex-shrink-0">
+				<AudVolumeSlider
+					{volume}
+					{muted}
+					{supportsVolume}
+					{onVolumeChange}
+					{onToggleMute}
+					variant="mobile"
+				/>
+			</div>
 
-		<!-- Playback controls -->
-		<div class="px-8 pb-8 flex items-center justify-center gap-8">
-			<button
-				class="player-btn-mobile-lg"
-				onclick={onPrevious}
-				aria-label="Previous track"
-				data-testid="previous-button-fullscreen"
-			>
-				<div class="i-lucide-skip-back w-8 h-8"></div>
-			</button>
-			<button
-				class="player-btn-mobile-play"
-				onclick={onPlayPause}
-				aria-label={paused ? playLabel : pauseLabel}
-				data-testid="play-pause-button-fullscreen"
-			>
-				{#if paused}
-					<div class="i-lucide-play w-9 h-9 ml-1"></div>
-				{:else}
-					<div class="i-lucide-pause w-9 h-9"></div>
-				{/if}
-			</button>
-			<button
-				class="player-btn-mobile-lg"
-				onclick={onNext}
-				aria-label="Next track"
-				data-testid="next-button-fullscreen"
-			>
-				<div class="i-lucide-skip-forward w-8 h-8"></div>
-			</button>
-		</div>
-
-		<!-- Volume -->
-		<div class="px-8 pb-6">
-			<AudVolumeSlider
-				{volume}
-				{muted}
-				{supportsVolume}
-				{onVolumeChange}
-				{onToggleMute}
-				variant="mobile"
-			/>
-		</div>
-
-		<!-- Device selector -->
-		{#if showDeviceSelector}
-			<div class="px-6 pb-4">
+			<!-- Device selector — unconditional in fullscreen so the user can
+			     always switch out of a remote device. The dropdown may be empty
+			     for a beat while the parent refetches the device list, but the
+			     trigger stays put. -->
+			<div class="px-6 pb-4 flex-shrink-0">
 				<AudDeviceSelector
 					{deviceName}
 					isRemote={isRemoteDevice}
@@ -377,7 +390,7 @@
 					{selectDeviceLabel}
 				/>
 			</div>
-		{/if}
+		</div>
 
 		<!-- Home indicator -->
 		<AudHomeIndicator />

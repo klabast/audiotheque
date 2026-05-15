@@ -249,6 +249,13 @@
 	}
 	function openFullScreen() {
 		isFullScreenOpen = true;
+		// Refresh the device list so the picker dropdown reflects what's
+		// actually online right now. The cache can drift between renders
+		// (WS welcome race, slept tab, devices added since mount) and the
+		// fullscreen view is the one place the user goes specifically to
+		// switch devices — a stale list there is what makes "no way to
+		// change playback" feel real.
+		playback.loadDevices();
 	}
 	function closeFullScreen() {
 		isFullScreenOpen = false;
