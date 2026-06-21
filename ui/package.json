@@ -24,7 +24,7 @@
 		"@eslint/js": "10.0.1",
 		"@iconify-json/lucide": "^1.2.114",
 		"@inlang/paraglide-js": "^2.20.0",
-		"@openapitools/openapi-generator-cli": "^2.39.0",
+		"@openapitools/openapi-generator-cli": "^2.35.0",
 		"@sveltejs/adapter-static": "3.0.10",
 		"@sveltejs/kit": "^2.66.0",
 		"@sveltejs/vite-plugin-svelte": "7.1.2",
