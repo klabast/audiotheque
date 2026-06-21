@@ -933,8 +933,8 @@ func TestSearchLibrary(t *testing.T) {
 		if len(result.Albums) != 1 {
 			t.Fatalf("want 1 album match, got %d", len(result.Albums))
 		}
-		if result.Albums[0].Title != "Abbey Road" {
-			t.Errorf("want \"Abbey Road\", got %q", result.Albums[0].Title)
+		if result.Albums[0].Album.Title != "Abbey Road" {
+			t.Errorf("want \"Abbey Road\", got %q", result.Albums[0].Album.Title)
 		}
 	})
 

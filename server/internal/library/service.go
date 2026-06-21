@@ -226,8 +226,11 @@ func (s *Service) ListAlbums(libraryID int64, opts ListAlbumsOptions) ([]*AlbumW
 // SearchResultLimit caps how many matches per entity type are returned.
 const SearchResultLimit = 25
 
-// Search finds albums, artists, and tracks matching the query (case-insensitive
-// substring) across a single library. An empty query returns an empty result.
+// Search finds albums, artists, and tracks matching the query across a single
+// library, ordered by relevance. Matching is full-text (tokenized, accent- and
+// case-insensitive, prefix/type-ahead) over title/name plus artist, genre and
+// year, so a query finds an album by its artist as well as its title. An empty
+// query returns an empty result.
 func (s *Service) Search(libraryID int64, query string) (*SearchResult, error) {
 	result := &SearchResult{}
 	if query == "" {
@@ -247,10 +250,29 @@ func (s *Service) Search(libraryID int64, query string) (*SearchResult, error) {
 		return nil, err
 	}
 
-	result.Albums = albums
+	result.Albums = make([]*AlbumWithArtist, len(albums))
+	for i, album := range albums {
+		result.Albums[i] = &AlbumWithArtist{Album: album, ArtistName: s.artistName(album.ArtistID)}
+	}
 	result.Artists = artists
-	result.Tracks = tracks
+	result.Tracks = make([]*TrackWithArtist, len(tracks))
+	for i, track := range tracks {
+		result.Tracks[i] = &TrackWithArtist{Track: track, ArtistName: s.artistName(track.ArtistID)}
+	}
 	return result, nil
+}
+
+// artistName resolves an artist id to its display name, returning "" when the
+// id is nil (compilations) or the lookup fails.
+func (s *Service) artistName(artistID *int64) string {
+	if artistID == nil {
+		return ""
+	}
+	artist, err := s.repo.GetArtistByID(*artistID)
+	if err != nil || artist == nil {
+		return ""
+	}
+	return artist.Name
 }
 
 // GetAlbumCoverPath returns the full file path to an album's cover art

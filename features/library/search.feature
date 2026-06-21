@@ -16,6 +16,11 @@ Feature: Library search
     When User searches for "album"
     Then Search results include at least one album
 
+  Scenario: Search finds an album by its artist name
+    Given User is on library browse page
+    When User searches for "band"
+    Then Search results include at least one album
+
   Scenario: Search shows empty state for no matches
     Given User is on library browse page
     When User searches for "qzxqzxqzx-not-found"

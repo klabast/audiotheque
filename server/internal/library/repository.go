@@ -605,8 +605,12 @@ WHERE a.library_id = ?`
 // LIKE in SQLite is case-insensitive for ASCII by default; the wrapper escapes
 // %, _, and \ so user input can't expand the pattern.
 func (r *repository) SearchAlbumsByLibrary(libraryID int64, query string, limit int) ([]*Album, error) {
-	pattern := "%" + escapeLikePattern(query) + "%"
+	match := buildFTSMatch(query)
+	if match == "" {
+		return nil, nil
+	}
 
+	// title is weighted highest, then artist; genre/year are weak signals.
 	//language=SQL
 	q := `
 SELECT a.id, a.library_id, a.artist_id, a.title, COALESCE(a.sort_title, ''), COALESCE(a.musicbrainz_id, ''),
@@ -615,12 +619,13 @@ SELECT a.id, a.library_id, a.artist_id, a.title, COALESCE(a.sort_title, ''), COA
        EXISTS(SELECT 1 FROM track t WHERE t.album_id = a.id AND t.is_hires = 1) AS is_hires,
        COALESCE(a.folder_path, ''), COALESCE(a.release_type, 'original'),
        a.created_at, a.updated_at
-FROM album a
-WHERE a.library_id = ? AND a.title LIKE ? ESCAPE '\'
-ORDER BY a.title
+FROM album_fts
+JOIN album a ON a.id = album_fts.rowid
+WHERE album_fts MATCH ? AND album_fts.library_id = ?
+ORDER BY bm25(album_fts, 10.0, 5.0, 1.0, 1.0)
 LIMIT ?`
 
-	rows, err := r.db.Query(q, libraryID, pattern, limit)
+	rows, err := r.db.Query(q, match, libraryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -650,17 +655,21 @@ LIMIT ?`
 
 // SearchArtistsByLibrary returns artists with a name matching the LIKE pattern.
 func (r *repository) SearchArtistsByLibrary(libraryID int64, query string, limit int) ([]*Artist, error) {
-	pattern := "%" + escapeLikePattern(query) + "%"
+	match := buildFTSMatch(query)
+	if match == "" {
+		return nil, nil
+	}
 
 	//language=SQL
 	q := `
-SELECT id, library_id, name, COALESCE(sort_name, ''), COALESCE(musicbrainz_id, ''), created_at, updated_at
-FROM artist
-WHERE library_id = ? AND name LIKE ? ESCAPE '\'
-ORDER BY name
+SELECT ar.id, ar.library_id, ar.name, COALESCE(ar.sort_name, ''), COALESCE(ar.musicbrainz_id, ''), ar.created_at, ar.updated_at
+FROM artist_fts
+JOIN artist ar ON ar.id = artist_fts.rowid
+WHERE artist_fts MATCH ? AND artist_fts.library_id = ?
+ORDER BY bm25(artist_fts)
 LIMIT ?`
 
-	rows, err := r.db.Query(q, libraryID, pattern, limit)
+	rows, err := r.db.Query(q, match, libraryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -683,20 +692,24 @@ LIMIT ?`
 
 // SearchTracksByLibrary returns tracks with a title matching the LIKE pattern.
 func (r *repository) SearchTracksByLibrary(libraryID int64, query string, limit int) ([]*Track, error) {
-	pattern := "%" + escapeLikePattern(query) + "%"
+	match := buildFTSMatch(query)
+	if match == "" {
+		return nil, nil
+	}
 
 	//language=SQL
 	q := `
-SELECT id, library_id, album_id, artist_id, file_path, file_name, file_size, file_modified,
-       title, COALESCE(sort_title, ''), track_number, disc_number, duration, year, COALESCE(genre, ''), COALESCE(musicbrainz_id, ''),
-       COALESCE(codec, ''), bitrate, sample_rate, bit_depth, channels, is_lossless, is_hires,
-       created_at, updated_at
-FROM track
-WHERE library_id = ? AND title LIKE ? ESCAPE '\'
-ORDER BY title
+SELECT t.id, t.library_id, t.album_id, t.artist_id, t.file_path, t.file_name, t.file_size, t.file_modified,
+       t.title, COALESCE(t.sort_title, ''), t.track_number, t.disc_number, t.duration, t.year, COALESCE(t.genre, ''), COALESCE(t.musicbrainz_id, ''),
+       COALESCE(t.codec, ''), t.bitrate, t.sample_rate, t.bit_depth, t.channels, t.is_lossless, t.is_hires,
+       t.created_at, t.updated_at
+FROM track_fts
+JOIN track t ON t.id = track_fts.rowid
+WHERE track_fts MATCH ? AND track_fts.library_id = ?
+ORDER BY bm25(track_fts, 10.0, 5.0, 1.0, 1.0)
 LIMIT ?`
 
-	rows, err := r.db.Query(q, libraryID, pattern, limit)
+	rows, err := r.db.Query(q, match, libraryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -776,14 +789,23 @@ func buildAlbumOrderBy(specs []SortSpec) string {
 	return strings.Join(parts, ", ")
 }
 
-// escapeLikePattern escapes %, _, and \ so user input is treated literally
-// inside a LIKE pattern (paired with `ESCAPE '\'` in the query).
-func escapeLikePattern(s string) string {
-	r := s
-	r = strings.ReplaceAll(r, `\`, `\\`)
-	r = strings.ReplaceAll(r, `%`, `\%`)
-	r = strings.ReplaceAll(r, `_`, `\_`)
-	return r
+// buildFTSMatch turns free-text user input into a safe FTS5 MATCH expression.
+// Each whitespace-separated token is wrapped in double quotes (so punctuation
+// can't be parsed as FTS syntax and inner quotes are escaped) with a trailing
+// `*` for prefix / type-ahead matching, and the tokens are ANDed together so
+// every word must match somewhere (title, artist, genre or year). Returns ""
+// when the input has no usable tokens, letting callers skip the query.
+func buildFTSMatch(query string) string {
+	fields := strings.Fields(query)
+	if len(fields) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(fields))
+	for _, f := range fields {
+		escaped := strings.ReplaceAll(f, `"`, `""`)
+		parts = append(parts, `"`+escaped+`"*`)
+	}
+	return strings.Join(parts, " AND ")
 }
 
 // =============================================================================

@@ -123,12 +123,19 @@
 							<a
 								href="/album/{a.id}"
 								onclick={handleResultClick}
-								class="text-text-primary hover:bg-surface-hover flex items-center justify-between px-3 py-1.5 text-sm"
+								class="text-text-primary hover:bg-surface-hover flex items-center justify-between gap-2 px-3 py-1.5 text-sm"
 								data-testid="search-result-album-{a.id}"
 							>
-								<span class="truncate">{a.title}</span>
+								<span class="min-w-0 flex-1">
+									<span class="block truncate">{a.title}</span>
+									{#if a.artist}
+										<span class="text-text-muted block truncate text-xs">
+											{m['library.search.by_artist']({ artist: a.artist })}
+										</span>
+									{/if}
+								</span>
 								{#if a.isHiRes}
-									<span class="text-warning ml-2 text-[10px] font-bold"
+									<span class="text-warning text-[10px] font-bold"
 										>{m['library.album_card.hi_res_badge']()}</span
 									>
 								{/if}
@@ -172,14 +179,24 @@
 									class="text-text-primary hover:bg-surface-hover block px-3 py-1.5 text-sm"
 									data-testid="search-result-track-{t.id}"
 								>
-									{t.title}
+									<span class="block truncate">{t.title}</span>
+									{#if t.artist}
+										<span class="text-text-muted block truncate text-xs">
+											{m['library.search.by_artist']({ artist: t.artist })}
+										</span>
+									{/if}
 								</a>
 							{:else}
 								<span
 									class="text-text-primary block px-3 py-1.5 text-sm"
 									data-testid="search-result-track-{t.id}"
 								>
-									{t.title}
+									<span class="block truncate">{t.title}</span>
+									{#if t.artist}
+										<span class="text-text-muted block truncate text-xs">
+											{m['library.search.by_artist']({ artist: t.artist })}
+										</span>
+									{/if}
 								</span>
 							{/if}
 						{/each}

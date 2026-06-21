@@ -87,11 +87,13 @@ type ListAlbumsOptions struct {
 	SortBy []SortSpec
 }
 
-// SearchResult groups library search matches by entity type.
+// SearchResult groups library search matches by entity type. Albums and tracks
+// carry their artist name for display ("album by X"); results are ordered by
+// relevance, not alphabetically.
 type SearchResult struct {
-	Albums  []*Album
+	Albums  []*AlbumWithArtist
 	Artists []*Artist
-	Tracks  []*Track
+	Tracks  []*TrackWithArtist
 }
 
 // Track represents a single audio track
