@@ -782,6 +782,7 @@ func (h *Handler) HandleListAlbumTracks(w http.ResponseWriter, r *http.Request) 
 type SearchAlbumResult struct {
 	ID      int64  `json:"id"`
 	Title   string `json:"title"`
+	Artist  string `json:"artist"`
 	IsHiRes bool   `json:"isHiRes"`
 }
 
@@ -793,6 +794,7 @@ type SearchArtistResult struct {
 type SearchTrackResult struct {
 	ID      int64  `json:"id"`
 	Title   string `json:"title"`
+	Artist  string `json:"artist"`
 	AlbumID *int64 `json:"albumId,omitempty"`
 }
 
@@ -804,7 +806,7 @@ type SearchResponse struct {
 
 // HandleSearch handles GET /api/libraries/{id}/search
 // @Summary Search a library
-// @Description Search albums, artists, and tracks in a library by substring match
+// @Description Full-text search for albums, artists, and tracks in a library, ranked by relevance. Matches title/name plus artist, genre and year; accent- and case-insensitive with prefix matching.
 // @Tags libraries
 // @Produce json
 // @Param id path int true "Library ID"
@@ -841,16 +843,22 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, a := range result.Albums {
 		response.Albums[i] = SearchAlbumResult{
-			ID:      a.ID,
-			Title:   a.Title,
-			IsHiRes: a.IsHiRes,
+			ID:      a.Album.ID,
+			Title:   a.Album.Title,
+			Artist:  a.ArtistName,
+			IsHiRes: a.Album.IsHiRes,
 		}
 	}
 	for i, a := range result.Artists {
 		response.Artists[i] = SearchArtistResult{ID: a.ID, Name: a.Name}
 	}
 	for i, t := range result.Tracks {
-		response.Tracks[i] = SearchTrackResult{ID: t.ID, Title: t.Title, AlbumID: t.AlbumID}
+		response.Tracks[i] = SearchTrackResult{
+			ID:      t.Track.ID,
+			Title:   t.Track.Title,
+			Artist:  t.ArtistName,
+			AlbumID: t.Track.AlbumID,
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
