@@ -11,8 +11,8 @@
 # Both are gitignored — the Dockerfile expects them in the build context.
 
 ARG GO_VERSION=1.26
-ARG ALPINE_VERSION=3.21
-ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.24
+ARG NODE_VERSION=24
 
 # ---------- 1. ui-builder ----------
 FROM node:${NODE_VERSION} AS ui-builder
