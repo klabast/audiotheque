@@ -114,10 +114,13 @@ Then(
 
 		const paths = pathsString.split(',').map((p) => resolveServerPath(p.trim()));
 		const pathElements = libraryItem.locator('[data-testid^="library-path-value-"]');
-		const displayedPaths = await pathElements.allTextContents();
 
+		// allTextContents() is a one-shot snapshot; poll so a save that is
+		// still round-tripping doesn't flake the assertion.
 		for (const expectedPath of paths) {
-			expect(displayedPaths).toContain(expectedPath);
+			await expect
+				.poll(() => pathElements.allTextContents(), { timeout: 10_000 })
+				.toContain(expectedPath);
 		}
 	}
 );
