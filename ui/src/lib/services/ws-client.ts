@@ -142,6 +142,11 @@ export class WebSocketClient {
 		return this.connected && this.ws?.readyState === WebSocket.OPEN;
 	}
 
+	/** The URL this client connects to. Exposed for tests. */
+	get connectUrl(): string {
+		return this.url;
+	}
+
 	/**
 	 * Subscribe to a specific message type
 	 */
@@ -207,6 +212,31 @@ export class WebSocketClient {
 	}
 }
 
+/** sessionStorage key for this tab's stable device identity. */
+const STABLE_CLIENT_ID_KEY = 'audiod-device-id';
+
+/**
+ * Returns a stable per-tab device identity, generating and persisting one on
+ * first use. The ID is sent to the server on WS connect so a browser tab
+ * that reconnects (LAN→WLAN switch, brief network drop, tab woken from
+ * sleep) keeps the SAME server-side deviceID instead of being assigned a
+ * fresh one on every socket — without that, a live playback session gets
+ * bound to a deviceID that no longer resolves and the server deletes it.
+ *
+ * sessionStorage (not localStorage) is a deliberate choice: the ID must
+ * survive reconnects and reloads within this tab, but die with the tab —
+ * "tab = device" only holds if closing the tab actually forgets the device.
+ */
+export function getOrCreateStableClientId(): string {
+	if (typeof sessionStorage === 'undefined') return '';
+	let id = sessionStorage.getItem(STABLE_CLIENT_ID_KEY);
+	if (!id) {
+		id = crypto.randomUUID();
+		sessionStorage.setItem(STABLE_CLIENT_ID_KEY, id);
+	}
+	return id;
+}
+
 /**
  * Create a WebSocket client instance
  * Note: This should only be called from services/api.ts
@@ -215,7 +245,9 @@ export function createWebSocketClient(): WebSocketClient {
 	// Determine WebSocket URL based on current page location
 	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 	const host = window.location.host;
-	const url = `${protocol}//${host}/api/ws`;
+	const clientId = getOrCreateStableClientId();
+	const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+	const url = `${protocol}//${host}/api/ws${query}`;
 
 	return new WebSocketClient(url);
 }

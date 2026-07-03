@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -111,10 +112,38 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			// A reconnect (new tab connection reusing the same client-supplied
+			// ID) can race ahead of the old connection's teardown: the new
+			// register message may be processed before the old connection's
+			// dead socket is even noticed. Without eviction here, both
+			// connections would sit in h.clients under the same ID — so
+			// SendToClient(id) (used for the client-id welcome) could pick the
+			// stale, dying connection instead of the live one, and the new tab
+			// would never learn its own ID. Evict any existing client with the
+			// same non-empty ID before admitting the new one.
 			h.mu.Lock()
+			var stale *Client
+			if client.ID != "" {
+				for existing := range h.clients {
+					if existing.ID == client.ID {
+						stale = existing
+						break
+					}
+				}
+			}
+			if stale != nil {
+				delete(h.clients, stale)
+				close(stale.send)
+			}
 			h.clients[client] = true
 			h.mu.Unlock()
 			log.Printf("WebSocket client connected (total: %d)", len(h.clients))
+			if stale != nil {
+				stale.conn.Close()
+				if h.onUnregister != nil {
+					h.onUnregister(stale)
+				}
+			}
 			if h.onRegister != nil {
 				h.onRegister(client)
 			}
@@ -339,13 +368,34 @@ func (c *Client) writePump() {
 	}
 }
 
-// ServeWs handles WebSocket requests from clients
-func ServeWs(hub *Hub, conn *websocket.Conn, userID int64, userAgent string) {
+// clientUUIDPattern matches a v4-shaped UUID (loosely — we don't check the
+// version/variant nibbles, just the hyphenated hex shape). It's just an
+// admission filter for a client-supplied identifier, not a security
+// boundary, so leniency here is fine.
+var clientUUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// browserClientIDPrefix marks IDs assigned from a client-supplied UUID (a
+// stable per-tab identity persisted in sessionStorage) so they can never
+// collide with the hub's own "c<n>" counter format or with MPD device IDs.
+const browserClientIDPrefix = "b-"
+
+// ServeWs handles WebSocket requests from clients. requestedID is the
+// client-supplied stable identifier (from sessionStorage, sent as a query
+// param on the WS URL) that lets a browser tab survive a network change
+// (e.g. LAN→WLAN) without losing its playback session — the old hub-assigned
+// "c<n>" ID was a fresh, unpredictable value on every reconnect. If
+// requestedID isn't a valid UUID (absent, malformed, or from an older
+// client build), we fall back to the old monotonic counter.
+func ServeWs(hub *Hub, conn *websocket.Conn, userID int64, userAgent string, requestedID string) {
+	id := fmt.Sprintf("c%d", hub.nextClientID.Add(1))
+	if clientUUIDPattern.MatchString(requestedID) {
+		id = browserClientIDPrefix + requestedID
+	}
 	client := &Client{
 		hub:       hub,
 		conn:      conn,
 		send:      make(chan []byte, 256),
-		ID:        fmt.Sprintf("c%d", hub.nextClientID.Add(1)),
+		ID:        id,
 		UserID:    userID,
 		UserAgent: userAgent,
 	}
