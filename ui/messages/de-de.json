@@ -87,6 +87,7 @@
 	"library.scan.in_progress": "Scanne…",
 	"library.scan.in_progress_aria": "Eine Bibliotheks-Suche läuft",
 	"library.search.by_artist": "von {artist}",
+	"library.search.clear": "Suche leeren",
 	"library.search.empty": "Keine Treffer",
 	"library.search.placeholder": "Alben, Künstler, Titel suchen…",
 	"library.search.section_albums": "Alben",
