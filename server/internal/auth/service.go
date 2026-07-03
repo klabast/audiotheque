@@ -583,9 +583,9 @@ func generateResetCode() (string, error) {
 	encoder := base32.StdEncoding.WithPadding(base32.NoPadding)
 	code := encoder.EncodeToString(b)
 
-	// Take first 8 characters (should be exactly 8, but be defensive)
-	if len(code) > 8 {
-		code = code[:8]
+	// Take first ResetCodeLength characters (should be exact already, but be defensive)
+	if len(code) > ResetCodeLength {
+		code = code[:ResetCodeLength]
 	}
 
 	return code, nil

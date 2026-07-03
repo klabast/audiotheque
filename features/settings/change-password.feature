@@ -24,17 +24,19 @@ Feature: Change Password
     When User attempts to change password with wrong current password
     Then User should see error "Current password is incorrect"
 
-  Scenario: A very short password is warned about but still accepted
-    When User starts changing password from "alicepass123" to "p"
+  Scenario: A short password is warned about but still accepted
+    When User starts changing password from "alicepass123" to "shortpw1"
     Then Weak password warning is shown
     When User submits the password change
     Then Password change succeeds
     When User logs out
-    And User authenticates with username "alice" and password "p"
+    And User authenticates with username "alice" and password "shortpw1"
     Then User should be logged in as "alice"
 
   Scenario: A password matching the username is warned about but still accepted
-    When User starts changing password from "alicepass123" to "alice"
+    Given Admin-User "longalice" exists with password "alicepass123"
+    And User "longalice" is logged in
+    When User starts changing password from "alicepass123" to "longalice"
     Then Weak password warning is shown
     When User submits the password change
     Then Password change succeeds

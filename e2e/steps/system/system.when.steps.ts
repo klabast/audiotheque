@@ -57,9 +57,12 @@ When('User visits any page', async function (this: AudiodWorld) {
 	await page.goto('/');
 });
 
-// Weak/strong test fixtures — small but not empty (empty is the only hard reject),
-// and well over 12 chars so the short-password warning does not fire.
-const WEAK_PASSWORD = 'p';
+// Weak/strong test fixtures. WEAK_PASSWORD sits at the hard floor
+// (MinPasswordLength / PASSWORD_MIN_LENGTH = 8) but under the 12-char
+// short-password warning threshold, so it's accepted while still
+// triggering the non-blocking warning. STRONG_PASSWORD is well over 12
+// chars so the short-password warning does not fire.
+const WEAK_PASSWORD = 'weakpass1';
 const STRONG_PASSWORD = 'VeryStrongPassword2026';
 
 When('User enters a weak password', async function (this: AudiodWorld) {

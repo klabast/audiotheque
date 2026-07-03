@@ -10,20 +10,6 @@ import (
 	"time"
 )
 
-const (
-	// Password validation. MinPasswordLength is intentionally 1 (non-empty).
-	// Policy: warn, don't block — any non-empty password is accepted, and the
-	// UI surfaces a non-blocking warning for short / equals-username / etc.
-	// Login rate limiting (deferred, see roadmap) is the proper defense
-	// against brute force, not a length minimum.
-	MinPasswordLength = 1
-	MaxPasswordLength = 64
-
-	// Username validation
-	MinUsernameLength = 2
-	MaxUsernameLength = 32
-)
-
 type Handler struct {
 	service *Service
 }
@@ -143,19 +129,10 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input
+	// Login only checks presence: length rules apply where passwords are
+	// set, and must never lock out accounts created under older rules.
 	if req.Username == "" || req.Password == "" {
 		http.Error(w, "Username and password are required", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Username) < MinUsernameLength || len(req.Username) > MaxUsernameLength {
-		http.Error(w, "Username must be between 2 and 32 characters", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Password) < MinPasswordLength || len(req.Password) > MaxPasswordLength {
-		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -288,8 +265,8 @@ func (h *Handler) HandleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.NewPassword) < MinPasswordLength || len(req.NewPassword) > MaxPasswordLength {
-		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
+	if err := ValidatePassword(req.NewPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -410,7 +387,7 @@ func (h *Handler) HandleConfirmPasswordReset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if len(req.Code) != 8 {
+	if err := ValidateResetCode(req.Code); err != nil {
 		http.Error(w, "Invalid reset code format", http.StatusBadRequest)
 		return
 	}
@@ -421,8 +398,8 @@ func (h *Handler) HandleConfirmPasswordReset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if len(req.NewPassword) < MinPasswordLength || len(req.NewPassword) > MaxPasswordLength {
-		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
+	if err := ValidatePassword(req.NewPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -747,13 +724,13 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.Username) < MinUsernameLength || len(req.Username) > MaxUsernameLength {
-		http.Error(w, "Username must be between 2 and 32 characters", http.StatusBadRequest)
+	if err := ValidateUsername(req.Username); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if len(req.Password) < MinPasswordLength || len(req.Password) > MaxPasswordLength {
-		http.Error(w, "Password must be at most 64 characters", http.StatusBadRequest)
+	if err := ValidatePassword(req.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

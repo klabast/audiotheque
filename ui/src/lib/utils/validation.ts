@@ -4,15 +4,16 @@
 
 import * as m from '$lib/paraglide/messages';
 
-// PASSWORD_MIN_LENGTH is intentionally 1 (non-empty). Policy: warn, don't block.
-// Any non-empty password is accepted; weak ones get a non-blocking warning via
-// assessPassword(). See docs/dev/plans/2026-05-14-roadmap-may.md §7.
-export const PASSWORD_MIN_LENGTH = 1;
+// Mirrors server/internal/auth/validation.go — frontend and backend must
+// stay in sync on these limits.
+export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 64;
 export const USERNAME_MIN_LENGTH = 2;
 export const USERNAME_MAX_LENGTH = 32;
+export const RESET_CODE_LENGTH = 8;
 
-// Anything below this is flagged as "short" — recommend length + password manager.
+// Anything below this (but still >= PASSWORD_MIN_LENGTH) is flagged as
+// "short" — recommend length + password manager, without blocking.
 const PASSWORD_SHORT_THRESHOLD = 12;
 
 export interface ValidationResult {
@@ -23,6 +24,13 @@ export interface ValidationResult {
 export function validatePassword(password: string): ValidationResult {
 	if (!password) {
 		return { valid: false, error: m['errors.password_required']() };
+	}
+
+	if (password.length < PASSWORD_MIN_LENGTH) {
+		return {
+			valid: false,
+			error: m['errors.password_min_length']({ minLength: PASSWORD_MIN_LENGTH })
+		};
 	}
 
 	if (password.length > PASSWORD_MAX_LENGTH) {
