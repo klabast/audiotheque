@@ -54,6 +54,15 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.Us
 }
 
 // HandleListDevices handles GET /api/settings/devices
+// @Summary List configured playback devices
+// @Description Lists admin-configured playback devices (MPD endpoints). Admin-only.
+// @Tags settings
+// @Produce json
+// @Success 200 {array} Device
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/devices [get]
+// @ID listSettingsDevices
 func (h *Handler) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
@@ -83,6 +92,18 @@ type createDeviceRequest struct {
 }
 
 // HandleCreateDevice handles POST /api/settings/devices
+// @Summary Create a playback device
+// @Description Registers a new playback device (type defaults to "mpd"). Admin-only.
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param request body createDeviceRequest true "device to create"
+// @Success 201 {object} Device
+// @Failure 400 {string} string "invalid request"
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/devices [post]
+// @ID createSettingsDevice
 func (h *Handler) HandleCreateDevice(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
@@ -126,6 +147,20 @@ type updateDeviceRequest struct {
 }
 
 // HandleUpdateDevice handles PUT /api/settings/devices/{id}
+// @Summary Update a playback device
+// @Description Renames or re-addresses an existing playback device. Admin-only.
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param id path string true "Device ID"
+// @Param request body updateDeviceRequest true "fields to update"
+// @Success 200 {object} Device
+// @Failure 400 {string} string "invalid request"
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Failure 404 {string} string "device not found"
+// @Router /settings/devices/{id} [put]
+// @ID updateSettingsDevice
 func (h *Handler) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
@@ -165,6 +200,16 @@ func (h *Handler) HandleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleDeleteDevice handles DELETE /api/settings/devices/{id}
+// @Summary Delete a playback device
+// @Description Removes a playback device. Admin-only.
+// @Tags settings
+// @Param id path string true "Device ID"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {string} string "invalid request"
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/devices/{id} [delete]
+// @ID deleteSettingsDevice
 func (h *Handler) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
@@ -198,6 +243,15 @@ type setStreamingRequest struct {
 }
 
 // HandleGetStreaming handles GET /api/settings/streaming
+// @Summary Get streaming settings
+// @Description Returns the hostname clients should use for direct streaming. Admin-only.
+// @Tags settings
+// @Produce json
+// @Success 200 {object} streamingResponse
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/streaming [get]
+// @ID getStreamingSettings
 func (h *Handler) HandleGetStreaming(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
@@ -296,6 +350,18 @@ func (h *Handler) HandleSetAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleSetStreaming handles PUT /api/settings/streaming
+// @Summary Update streaming settings
+// @Description Sets the hostname clients should use for direct streaming. Admin-only.
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param request body setStreamingRequest true "streaming settings"
+// @Success 200 {object} map[string]string
+// @Failure 400 {string} string "invalid request"
+// @Failure 401 {string} string "unauthorized"
+// @Failure 403 {string} string "forbidden"
+// @Router /settings/streaming [put]
+// @ID updateStreamingSettings
 func (h *Handler) HandleSetStreaming(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.requireAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {

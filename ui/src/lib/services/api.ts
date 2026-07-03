@@ -1,5 +1,18 @@
-import { albumsApi, apiConfig, authApi, librariesApi, systemApi } from '$lib/api/client';
-import type { PlaybackSessionResponse } from '$lib/api/client';
+import {
+	albumsApi,
+	authApi,
+	devicesApi,
+	librariesApi,
+	playbackApi,
+	settingsApi,
+	systemApi,
+	usersApi
+} from '$lib/api/client';
+import type {
+	PlaybackSessionResponse,
+	SettingsDevice as GeneratedSettingsDevice
+} from '$lib/api/client';
+import { ResponseError, type InitOverrideFunction } from '$lib/api/generated/src/runtime';
 import { throwIfNotOk } from './api-error';
 import {
 	createWebSocketClient,
@@ -88,6 +101,26 @@ class ApiService {
 	/** Adds X-Audiod-Client-Id when known. Headers param accepted as a record. */
 	private clientIdHeader(): Record<string, string> {
 		return this.thisClientId ? { 'X-Audiod-Client-Id': this.thisClientId } : {};
+	}
+
+	/** Merges X-Audiod-Client-Id into a generated-client call via initOverrides. */
+	private clientIdOverride(): InitOverrideFunction {
+		return async ({ init }) => ({
+			...init,
+			headers: { ...init.headers, ...this.clientIdHeader() }
+		});
+	}
+
+	/**
+	 * The generated client throws ResponseError (a generic message) on non-2xx.
+	 * Translate it back to the Error shape throwIfNotOk produces, so callers
+	 * see the same message/status/body they did with hand-rolled fetch.
+	 */
+	private async rethrow(err: unknown, message: string): Promise<never> {
+		if (err instanceof ResponseError) {
+			await throwIfNotOk(err.response, message);
+		}
+		throw err;
 	}
 
 	/**
@@ -307,137 +340,106 @@ class ApiService {
 	}
 
 	async playAlbum(albumId: number, startTrackId?: number, deviceId?: string) {
-		// Always use raw fetch — generated client doesn't yet know about
-		// trackId (start-from-track) or deviceId.
-		const basePath = apiConfig.basePath ?? '';
-		const body: Record<string, unknown> = { albumId };
-		if (startTrackId) body.trackId = startTrackId;
-		if (deviceId) body.deviceId = deviceId;
-
-		const response = await fetch(`${basePath}/playback/play`, {
-			method: 'POST',
+		try {
 			// Under the unified-session invariant the server REQUIRES a device.
 			// If no explicit deviceId was passed it falls back to
-			// X-Audiod-Client-Id (this tab's hub ID), which is added by
-			// clientIdHeader() — see connectWebSocket. Without that fallback
-			// we'd 400 every "play here" click.
-			headers: { 'Content-Type': 'application/json', ...this.clientIdHeader() },
-			credentials: 'include',
-			body: JSON.stringify(body)
-		});
-		await throwIfNotOk(response, 'Failed to play album');
-		return response.json();
+			// X-Audiod-Client-Id (this tab's hub ID), which clientIdOverride()
+			// attaches — see connectWebSocket. Without that fallback we'd 400
+			// every "play here" click.
+			return await playbackApi.play(
+				{ request: { albumId, trackId: startTrackId, deviceId } },
+				this.clientIdOverride()
+			);
+		} catch (err) {
+			return this.rethrow(err, 'Failed to play album');
+		}
 	}
 
 	async getPlaybackSession() {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/session`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to get playback session');
-		return response.json();
+		try {
+			return await playbackApi.getSession();
+		} catch (err) {
+			return this.rethrow(err, 'Failed to get playback session');
+		}
 	}
 
 	async pausePlayback(position: number) {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/pause`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ position })
-		});
-		await throwIfNotOk(response, 'Failed to pause playback');
-		return response.json();
+		try {
+			return await playbackApi.pause({ request: { position } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to pause playback');
+		}
 	}
 
 	async resumePlayback() {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/resume`, {
-			method: 'POST',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to resume playback');
-		return response.json();
+		try {
+			return await playbackApi.resume();
+		} catch (err) {
+			return this.rethrow(err, 'Failed to resume playback');
+		}
 	}
 
 	async nextTrack() {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/next`, {
-			method: 'POST',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to skip to next track');
-		return response.json();
+		try {
+			return await playbackApi.next();
+		} catch (err) {
+			return this.rethrow(err, 'Failed to skip to next track');
+		}
 	}
 
 	async previousTrack() {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/previous`, {
-			method: 'POST',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to go to previous track');
-		return response.json();
+		try {
+			return await playbackApi.previous();
+		} catch (err) {
+			return this.rethrow(err, 'Failed to go to previous track');
+		}
 	}
 
 	/**
 	 * Seek to position in current track
 	 */
 	async seekPlayback(position: number) {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/seek`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ position: Math.floor(position) })
-		});
-		await throwIfNotOk(response, 'Failed to seek');
-		return response.json();
+		try {
+			return await playbackApi.seek({ request: { position: Math.floor(position) } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to seek');
+		}
 	}
 
 	/**
 	 * Set playback volume (0-100)
 	 */
 	async setPlaybackVolume(volume: number) {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/volume`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ volume: Math.round(volume) })
-		});
-		await throwIfNotOk(response, 'Failed to set volume');
-		return response.json();
+		try {
+			return await playbackApi.setVolume({ request: { volume: Math.round(volume) } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to set volume');
+		}
 	}
 
 	/**
 	 * Transfer playback to a different device
 	 */
 	async transferPlayback(deviceId: string) {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/playback/transfer`, {
-			method: 'POST',
+		try {
 			// Empty deviceId is interpreted server-side as "transfer to me",
 			// derived from X-Audiod-Client-Id. Always include the header.
-			headers: { 'Content-Type': 'application/json', ...this.clientIdHeader() },
-			credentials: 'include',
-			body: JSON.stringify({ deviceId })
-		});
-		await throwIfNotOk(response, 'Failed to transfer playback');
-		return response.json();
+			return await playbackApi.transferPlayback({ request: { deviceId } }, this.clientIdOverride());
+		} catch (err) {
+			return this.rethrow(err, 'Failed to transfer playback');
+		}
 	}
 
 	/**
 	 * List available playback devices
 	 */
 	async listDevices(): Promise<DeviceInfo[]> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/devices`, {
-			credentials: 'include',
-			headers: { ...this.clientIdHeader() }
-		});
-		await throwIfNotOk(response, 'Failed to list devices');
-		return response.json();
+		try {
+			const result = await devicesApi.listDevices(this.clientIdOverride());
+			return result as unknown as DeviceInfo[];
+		} catch (err) {
+			return this.rethrow(err, 'Failed to list devices');
+		}
 	}
 
 	/**
@@ -457,134 +459,127 @@ class ApiService {
 
 	// --- Settings: Devices ---
 
+	private toSettingsDevice(d: GeneratedSettingsDevice): SettingsDevice {
+		return {
+			ID: d.iD ?? '',
+			Name: d.name ?? '',
+			Type: d.type ?? '',
+			Address: d.address ?? '',
+			CreatedAt: d.createdAt ?? '',
+			UpdatedAt: d.updatedAt ?? ''
+		};
+	}
+
 	async listSettingsDevices(): Promise<SettingsDevice[]> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to list devices');
-		return response.json();
+		try {
+			const result = await settingsApi.listSettingsDevices();
+			return result.map((d) => this.toSettingsDevice(d));
+		} catch (err) {
+			return this.rethrow(err, 'Failed to list devices');
+		}
 	}
 
 	async createSettingsDevice(name: string, type: string, address: string): Promise<SettingsDevice> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ name, type, address })
-		});
-		await throwIfNotOk(response, 'Failed to create device');
-		return response.json();
+		try {
+			const result = await settingsApi.createSettingsDevice({ request: { name, type, address } });
+			return this.toSettingsDevice(result);
+		} catch (err) {
+			return this.rethrow(err, 'Failed to create device');
+		}
 	}
 
 	async updateSettingsDevice(id: string, name: string, address: string): Promise<SettingsDevice> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices/${id}`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ name, address })
-		});
-		await throwIfNotOk(response, 'Failed to update device');
-		return response.json();
+		try {
+			const result = await settingsApi.updateSettingsDevice({ id, request: { name, address } });
+			return this.toSettingsDevice(result);
+		} catch (err) {
+			return this.rethrow(err, 'Failed to update device');
+		}
 	}
 
 	async deleteSettingsDevice(id: string): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices/${id}`, {
-			method: 'DELETE',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to delete device');
+		try {
+			await settingsApi.deleteSettingsDevice({ id });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to delete device');
+		}
 	}
 
 	// --- Settings: Streaming ---
 
 	async getStreamingSettings(): Promise<{ hostname: string }> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/streaming`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to get streaming settings');
-		return response.json();
+		try {
+			const result = await settingsApi.getStreamingSettings();
+			return { hostname: result.hostname ?? '' };
+		} catch (err) {
+			return this.rethrow(err, 'Failed to get streaming settings');
+		}
 	}
 
 	async updateStreamingSettings(hostname: string): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/streaming`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ hostname })
-		});
-		await throwIfNotOk(response, 'Failed to update streaming settings');
+		try {
+			await settingsApi.updateStreamingSettings({ request: { hostname } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to update streaming settings');
+		}
 	}
 
 	// --- Settings: Authentication toggle ---
 
 	async getAuthEnabled(): Promise<boolean> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/auth`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to load auth setting');
-		const body = (await response.json()) as { enabled: boolean };
-		return body.enabled;
+		try {
+			const result = await settingsApi.settingsAuthGet();
+			return result.enabled ?? false;
+		} catch (err) {
+			return this.rethrow(err, 'Failed to load auth setting');
+		}
 	}
 
 	async setAuthEnabled(enabled: boolean): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/auth`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ enabled })
-		});
-		await throwIfNotOk(response, 'Failed to update auth setting');
+		try {
+			await settingsApi.settingsAuthPut({ request: { enabled } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to update auth setting');
+		}
 	}
 
 	// --- User management (admin) ---
 
 	async listUsers(): Promise<Array<{ id: number; username: string; is_admin: boolean }>> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/users`, { credentials: 'include' });
-		await throwIfNotOk(response, 'Failed to load users');
-		const body = (await response.json()) as {
-			users: Array<{ id: number; username: string; is_admin: boolean }>;
-		};
-		return body.users ?? [];
+		try {
+			const result = await usersApi.listUsers();
+			return (result.users ?? []).map((u) => ({
+				id: u.id ?? 0,
+				username: u.username ?? '',
+				is_admin: u.isAdmin ?? false
+			}));
+		} catch (err) {
+			return this.rethrow(err, 'Failed to load users');
+		}
 	}
 
 	async createUser(username: string, password: string, isAdmin: boolean = false): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/users`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ username, password, is_admin: isAdmin })
-		});
-		await throwIfNotOk(response, 'Failed to create user');
+		try {
+			await usersApi.createUser({ request: { username, password, isAdmin } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to create user');
+		}
 	}
 
 	async deleteUser(id: number): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/users/${id}`, {
-			method: 'DELETE',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to delete user');
+		try {
+			await usersApi.deleteUser({ id });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to delete user');
+		}
 	}
 
 	async resetUserPassword(id: number, newPassword: string): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/users/${id}/password`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ new_password: newPassword })
-		});
-		await throwIfNotOk(response, 'Failed to reset user password');
+		try {
+			await usersApi.resetUserPassword({ id, request: { newPassword } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to reset user password');
+		}
 	}
 }
 

@@ -2,8 +2,10 @@ import {
 	AlbumsApi,
 	AuthApi,
 	Configuration,
+	DevicesApi,
 	LibrariesApi,
 	PlaybackApi,
+	SettingsApi,
 	SystemApi,
 	TracksApi,
 	UsersApi
@@ -26,6 +28,8 @@ export const albumsApi = new AlbumsApi(apiConfig);
 export const playbackApi = new PlaybackApi(apiConfig);
 export const tracksApi = new TracksApi(apiConfig);
 export const usersApi = new UsersApi(apiConfig);
+export const devicesApi = new DevicesApi(apiConfig);
+export const settingsApi = new SettingsApi(apiConfig);
 
 export * from './generated/src/models';
 export { Configuration } from './generated/src';
