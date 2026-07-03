@@ -47,9 +47,9 @@ Example:
 			return fmt.Errorf("look up user %q: %w", username, err)
 		}
 
+		sessions := auth.NewSessionRepository(db)
 		soon := time.Now().UTC().Add(1 * time.Minute)
-		_, err = db.Exec(`UPDATE session SET expires_at = ? WHERE user_id = ?`, soon, user.ID)
-		if err != nil {
+		if err := sessions.SetExpiryForUser(user.ID, soon); err != nil {
 			return fmt.Errorf("update sessions: %w", err)
 		}
 		fmt.Printf("✓ Sessions for %q now expire at %s\n", username, soon.Format(time.RFC3339))

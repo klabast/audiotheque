@@ -4,7 +4,13 @@
 	import { APP_NAME } from '$lib/branding';
 	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '$lib/components/ui';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { validatePassword, validatePasswordMatch } from '$lib/utils/validation';
+	import {
+		validatePassword,
+		validatePasswordMatch,
+		PASSWORD_MIN_LENGTH,
+		PASSWORD_MAX_LENGTH,
+		RESET_CODE_LENGTH
+	} from '$lib/utils/validation';
 	import * as m from '$lib/paraglide/messages';
 
 	const authService = new AuthService();
@@ -41,7 +47,7 @@
 		error = '';
 
 		// Validation
-		if (!enteredCode || enteredCode.length !== 8) {
+		if (!enteredCode || enteredCode.length !== RESET_CODE_LENGTH) {
 			error = m['errors.reset_code_length']();
 			return;
 		}
@@ -149,8 +155,8 @@
 								}}
 								disabled={confirming}
 								required
-								maxlength={8}
-								minlength={8}
+								maxlength={RESET_CODE_LENGTH}
+								minlength={RESET_CODE_LENGTH}
 								placeholder={m['placeholders.reset_code']()}
 								class="text-center font-mono text-lg tracking-wider uppercase"
 								data-testid="reset-code-input"
@@ -166,8 +172,8 @@
 								bind:value={newPassword}
 								disabled={confirming}
 								required
-								minlength={8}
-								maxlength={64}
+								minlength={PASSWORD_MIN_LENGTH}
+								maxlength={PASSWORD_MAX_LENGTH}
 								placeholder={m['placeholders.new_password']()}
 								data-testid="new-password-input"
 							/>
@@ -182,8 +188,8 @@
 								bind:value={confirmPassword}
 								disabled={confirming}
 								required
-								minlength={8}
-								maxlength={64}
+								minlength={PASSWORD_MIN_LENGTH}
+								maxlength={PASSWORD_MAX_LENGTH}
 								placeholder={m['placeholders.confirm_password']()}
 								data-testid="confirm-password-input"
 							/>

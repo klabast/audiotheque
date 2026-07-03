@@ -4,13 +4,16 @@
 
 import * as m from '$lib/paraglide/messages';
 
-// PASSWORD_MIN_LENGTH is intentionally 1 (non-empty). Policy: warn, don't block.
-// Any non-empty password is accepted; weak ones get a non-blocking warning via
-// assessPassword(). See docs/dev/plans/2026-05-14-roadmap-may.md §7.
+// Mirrors server/internal/auth/validation.go — frontend and backend must
+// stay in sync on these limits.
+// PASSWORD_MIN_LENGTH is intentionally 1 (non-empty). Policy: warn, don't
+// block — any non-empty password is accepted; weak ones get a non-blocking
+// warning via assessPassword(). The weak-password e2e features are the spec.
 export const PASSWORD_MIN_LENGTH = 1;
 export const PASSWORD_MAX_LENGTH = 64;
 export const USERNAME_MIN_LENGTH = 2;
 export const USERNAME_MAX_LENGTH = 32;
+export const RESET_CODE_LENGTH = 8;
 
 // Anything below this is flagged as "short" — recommend length + password manager.
 const PASSWORD_SHORT_THRESHOLD = 12;

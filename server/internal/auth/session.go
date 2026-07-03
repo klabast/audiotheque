@@ -47,6 +47,11 @@ type SessionRepository interface {
 	DeleteAllForUserExcept(userID int64, exceptID string) error
 	ListForUser(userID int64) ([]*Session, error)
 	DeleteExpired(now time.Time) (int64, error)
+	// SetExpiryForUser bulk-sets expires_at on every session belonging to
+	// userID. Used by the `audiod session expire-soon` CLI fixture command
+	// to simulate "session past halfway through its window" for the
+	// @sliding-renewal e2e scenario without sleeping half a TTL.
+	SetExpiryForUser(userID int64, expiresAt time.Time) error
 }
 
 // sessionRepository is the SQLite-backed implementation.
@@ -170,6 +175,16 @@ func (r *sessionRepository) DeleteExpired(now time.Time) (int64, error) {
 	return res.RowsAffected()
 }
 
+func (r *sessionRepository) SetExpiryForUser(userID int64, expiresAt time.Time) error {
+	//language=SQL
+	query := `UPDATE session SET expires_at = ? WHERE user_id = ?`
+	_, err := r.db.Exec(query, expiresAt, userID)
+	if err != nil {
+		return fmt.Errorf("session set expiry for user: %w", err)
+	}
+	return nil
+}
+
 // inMemorySessionRepository is a SessionRepository backed by a Go map.
 // Used by tests that mock the auth Repository — production code uses
 // NewSessionRepository against the SQLite-backed DB.
@@ -252,4 +267,13 @@ func (m *inMemorySessionRepository) DeleteExpired(now time.Time) (int64, error) 
 		}
 	}
 	return n, nil
+}
+
+func (m *inMemorySessionRepository) SetExpiryForUser(userID int64, expiresAt time.Time) error {
+	for _, s := range m.sessions {
+		if s.UserID == userID {
+			s.ExpiresAt = expiresAt
+		}
+	}
+	return nil
 }
