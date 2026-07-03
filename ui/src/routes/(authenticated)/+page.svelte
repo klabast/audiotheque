@@ -2,7 +2,12 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { api, type LibraryLibraryResponse, type LibraryAlbumResponse } from '$lib/services/api';
+	import {
+		api,
+		type LibraryLibraryResponse,
+		type LibraryAlbumResponse,
+		type LibrarySearchTrackResult
+	} from '$lib/services/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { scan } from '$lib/stores/scan.svelte';
 	import { APP_NAME } from '$lib/branding';
@@ -10,12 +15,14 @@
 	import { Button, AudAlbumCard } from '$lib/components/ui';
 	import { playback } from '$lib/stores/playback.svelte';
 	import { getMainScrollContainer } from '$lib/utils/scroll-restoration';
-	import { Zap, ArrowUp, ArrowDown } from 'lucide-svelte';
+	import { matchesQuery } from '$lib/utils/text-match';
+	import { Zap, ArrowUp, ArrowDown, Play } from 'lucide-svelte';
 	import { createVirtualizer } from '@tanstack/svelte-virtual';
 
 	type SortField = 'album-artist' | 'artist' | 'album-title' | 'year';
 	type SortDir = 'asc' | 'desc';
 	type SortLevel = { field: SortField; dir: SortDir };
+	type SearchScope = 'albums' | 'artists' | 'tracks';
 
 	const SORT_FIELDS: SortField[] = ['album-artist', 'artist', 'album-title', 'year'];
 	const SORT_LABEL: Record<SortField, () => string> = {
@@ -28,6 +35,14 @@
 		{ field: 'album-artist', dir: 'asc' },
 		{ field: 'year', dir: 'asc' }
 	];
+
+	const SEARCH_SCOPES: SearchScope[] = ['albums', 'artists', 'tracks'];
+	const SCOPE_LABEL: Record<SearchScope, () => string> = {
+		albums: m['library.search.section_albums'],
+		artists: m['library.search.section_artists'],
+		tracks: m['library.search.section_tracks']
+	};
+	const TRACK_SEARCH_DEBOUNCE_MS = 200;
 
 	let libraries = $state<LibraryLibraryResponse[]>([]);
 	let albums = $state<LibraryAlbumResponse[]>([]);
@@ -45,6 +60,73 @@
 	function extractYear(releaseDate: string | undefined): string | undefined {
 		const prefix = releaseDate?.slice(0, 4);
 		return prefix && /^\d{4}$/.test(prefix) ? prefix : undefined;
+	}
+
+	let query = $derived($page.url.searchParams.get('q') ?? '');
+	let hasQuery = $derived(query.trim().length > 0);
+	let scope = $derived(parseScope($page.url.searchParams.get('scope')));
+
+	function parseScope(raw: string | null): SearchScope {
+		return (SEARCH_SCOPES as string[]).includes(raw ?? '') ? (raw as SearchScope) : 'albums';
+	}
+
+	function setScope(next: SearchScope) {
+		goto(buildQueryString({ scope: next === 'albums' ? null : next }), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
+
+	// Albums/Artists scopes filter the already-loaded grid client-side — no
+	// network round-trip, so every keystroke updates instantly.
+	let displayedAlbums = $derived(
+		!hasQuery
+			? albums
+			: albums.filter((a) =>
+					scope === 'artists'
+						? matchesQuery(a.artistName, query)
+						: matchesQuery(a.title, query) || matchesQuery(a.artistName, query)
+				)
+	);
+
+	// Tracks scope goes through the FTS endpoint (debounced) since tracks
+	// aren't loaded into the client. Capped at 25 results server-side.
+	let trackResults = $state<LibrarySearchTrackResult[]>([]);
+	let trackSearchLoading = $state(false);
+	let trackDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		const active = scope === 'tracks' && hasQuery;
+		const q = query;
+		const libId = libraries[0]?.id;
+		if (trackDebounceHandle) clearTimeout(trackDebounceHandle);
+		if (!active || !libId) {
+			trackResults = [];
+			trackSearchLoading = false;
+			return;
+		}
+		trackSearchLoading = true;
+		trackDebounceHandle = setTimeout(async () => {
+			try {
+				const res = await api.searchLibrary(libId, q);
+				trackResults = res.tracks ?? [];
+			} catch (e) {
+				console.error('Track search failed:', e);
+				trackResults = [];
+			} finally {
+				trackSearchLoading = false;
+			}
+		}, TRACK_SEARCH_DEBOUNCE_MS);
+	});
+
+	async function playSearchTrack(track: LibrarySearchTrackResult) {
+		if (track.albumId === undefined || track.id === undefined) return;
+		try {
+			await playback.playAlbum(track.albumId, track.id);
+		} catch (e) {
+			console.error('Failed to play track:', e);
+		}
 	}
 
 	function parseSort(raw: string | null): [SortLevel, SortLevel] {
@@ -165,7 +247,7 @@
 	let containerWidth = $state(0);
 	let scrollEl: HTMLElement | null = $state(null);
 	const cols = $derived(containerWidth > 0 ? colsForWidth(containerWidth) : 2);
-	const rows = $derived(Math.ceil(albums.length / cols));
+	const rows = $derived(Math.ceil(displayedAlbums.length / cols));
 
 	// Estimate row height: card width = (containerWidth - (cols-1)*gap) / cols,
 	// add ~64px for title + artist + padding. Gap ≈ 16px (gap-4).
@@ -245,6 +327,7 @@
 	onDestroy(() => {
 		offLibraryUpdated();
 		if (refreshTimer !== null) clearTimeout(refreshTimer);
+		if (trackDebounceHandle !== null) clearTimeout(trackDebounceHandle);
 	});
 </script>
 
@@ -281,6 +364,27 @@
 			class="mb-4 flex flex-wrap items-center justify-center gap-2"
 			data-testid="library-toolbar"
 		>
+			{#if hasQuery}
+				<div
+					class="border-border bg-surface flex items-center gap-0.5 rounded-md border p-0.5"
+					role="tablist"
+					data-testid="search-scope-tabs"
+				>
+					{#each SEARCH_SCOPES as s (s)}
+						<button
+							type="button"
+							role="tab"
+							aria-selected={scope === s}
+							onclick={() => setScope(s)}
+							class="text-text-secondary hover:text-text-primary aria-selected:bg-primary/10 aria-selected:text-primary rounded px-3 py-1 text-sm transition-colors"
+							data-testid="search-scope-{s}"
+						>
+							{SCOPE_LABEL[s]()}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
 			<button
 				type="button"
 				onclick={toggleHiRes}
@@ -354,44 +458,101 @@
 			</div>
 		</div>
 
-		<!-- Album grid (virtualized rows) -->
-		<div bind:this={containerEl} data-testid="album-grid">
-			{#if scrollEl}
-				<div style="height: {$rowVirtualizer.getTotalSize()}px; position: relative; width: 100%;">
-					{#each $rowVirtualizer.getVirtualItems() as virtualRow (virtualRow.key)}
+		{#if hasQuery && scope === 'tracks'}
+			<!-- Track search results (server-side FTS, capped at 25 hits) -->
+			<div
+				class="border-border divide-border divide-y overflow-hidden rounded-lg border"
+				data-testid="track-search-results"
+			>
+				{#if trackSearchLoading && trackResults.length === 0}
+					<p class="text-text-muted px-3 py-2 text-sm">…</p>
+				{:else if trackResults.length === 0}
+					<p class="text-text-muted px-3 py-2 text-sm" data-testid="search-empty">
+						{m['library.search.empty']()}
+					</p>
+				{:else}
+					{#each trackResults as track (track.id)}
 						<div
-							class="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
-							style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({virtualRow.start}px);"
+							class="hover:bg-surface-hover flex items-center gap-3 px-3 py-2"
+							data-testid="track-search-result-{track.id}"
 						>
-							{#each albums.slice(virtualRow.index * cols, virtualRow.index * cols + cols) as album (album.id)}
-								<AudAlbumCard
-									id={album.id!}
-									title={album.title!}
-									artistName={album.artistName}
-									isHiRes={album.isHiRes ?? false}
-									year={showYear ? extractYear(album.releaseDate) : undefined}
-									onplay={() => playback.playAlbum(album.id!)}
-								/>
-							{/each}
+							<button
+								type="button"
+								onclick={() => playSearchTrack(track)}
+								disabled={track.albumId === undefined}
+								class="text-text-secondary hover:text-text-primary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full disabled:opacity-40"
+								aria-label={m['playback.play']()}
+								data-testid="track-search-play-{track.id}"
+							>
+								<Play class="h-4 w-4" fill="currentColor" />
+							</button>
+							{#if track.albumId !== undefined}
+								<a href="/album/{track.albumId}" class="min-w-0 flex-1">
+									<span class="text-text-primary block truncate text-sm">{track.title}</span>
+									{#if track.artist}
+										<span class="text-text-muted block truncate text-xs">
+											{m['library.search.by_artist']({ artist: track.artist })}
+										</span>
+									{/if}
+								</a>
+							{:else}
+								<span class="min-w-0 flex-1">
+									<span class="text-text-primary block truncate text-sm">{track.title}</span>
+									{#if track.artist}
+										<span class="text-text-muted block truncate text-xs">
+											{m['library.search.by_artist']({ artist: track.artist })}
+										</span>
+									{/if}
+								</span>
+							{/if}
 						</div>
 					{/each}
-				</div>
-			{:else}
-				<!-- Initial render before scrollEl is wired: show first row so the
-					page isn't blank during hydration. -->
-				<div class="album-grid">
-					{#each albums.slice(0, cols * 2) as album (album.id)}
-						<AudAlbumCard
-							id={album.id!}
-							title={album.title!}
-							artistName={album.artistName}
-							isHiRes={album.isHiRes ?? false}
-							year={showYear ? extractYear(album.releaseDate) : undefined}
-							onplay={() => playback.playAlbum(album.id!)}
-						/>
-					{/each}
-				</div>
-			{/if}
-		</div>
+				{/if}
+			</div>
+		{:else if hasQuery && displayedAlbums.length === 0}
+			<p class="text-text-muted px-3 py-8 text-center text-sm" data-testid="search-empty">
+				{m['library.search.empty']()}
+			</p>
+		{:else}
+			<!-- Album grid (virtualized rows) -->
+			<div bind:this={containerEl} data-testid="album-grid">
+				{#if scrollEl}
+					<div style="height: {$rowVirtualizer.getTotalSize()}px; position: relative; width: 100%;">
+						{#each $rowVirtualizer.getVirtualItems() as virtualRow (virtualRow.key)}
+							<div
+								class="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+								style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({virtualRow.start}px);"
+							>
+								{#each displayedAlbums.slice(virtualRow.index * cols, virtualRow.index * cols + cols) as album (album.id)}
+									<AudAlbumCard
+										id={album.id!}
+										title={album.title!}
+										artistName={album.artistName}
+										isHiRes={album.isHiRes ?? false}
+										year={showYear ? extractYear(album.releaseDate) : undefined}
+										onplay={() => playback.playAlbum(album.id!)}
+									/>
+								{/each}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<!-- Initial render before scrollEl is wired: show first row so the
+						page isn't blank during hydration. -->
+					<div class="album-grid">
+						{#each displayedAlbums.slice(0, cols * 2) as album (album.id)}
+							<AudAlbumCard
+								id={album.id!}
+								title={album.title!}
+								artistName={album.artistName}
+								isHiRes={album.isHiRes ?? false}
+								year={showYear ? extractYear(album.releaseDate) : undefined}
+								onplay={() => playback.playAlbum(album.id!)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 {/if}

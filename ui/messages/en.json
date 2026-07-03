@@ -87,6 +87,7 @@
 	"library.scan.in_progress": "Scanning…",
 	"library.scan.in_progress_aria": "A library scan is in progress",
 	"library.search.by_artist": "by {artist}",
+	"library.search.clear": "Clear search",
 	"library.search.empty": "No matches",
 	"library.search.placeholder": "Search albums, artists, tracks…",
 	"library.search.section_albums": "Albums",

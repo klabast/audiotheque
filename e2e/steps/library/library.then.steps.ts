@@ -365,17 +365,39 @@ Then('Hi-res filter is enabled', async function (this: AudiodWorld) {
 	await expect(toggle).toHaveAttribute('data-active', 'true');
 });
 
-Then('Search results include at least one album', async function (this: AudiodWorld) {
+Then('Album grid shows a matching album', async function (this: AudiodWorld) {
 	const page = this.getPage();
-	const albumResults = page.locator('[data-testid^="search-result-album-"]');
-	await expect(albumResults.first()).toBeVisible({ timeout: 5000 });
-	expect(await albumResults.count()).toBeGreaterThan(0);
+	const cards = page.locator('[data-testid="album-grid"] [data-testid^="album-card-"]');
+	await expect(cards.first()).toBeVisible({ timeout: 5000 });
+	expect(await cards.count()).toBeGreaterThan(0);
 });
 
 Then('Search results are empty', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	const empty = page.locator('[data-testid="search-empty"]');
 	await expect(empty).toBeVisible({ timeout: 5000 });
+});
+
+Then('Search scope tabs are visible', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await expect(page.locator('[data-testid="search-scope-tabs"]')).toBeVisible({ timeout: 5000 });
+});
+
+Then('Search scope tabs are hidden', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await expect(page.locator('[data-testid="search-scope-tabs"]')).toHaveCount(0);
+});
+
+Then('Track search results include at least one track', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	const results = page.locator('[data-testid^="track-search-result-"]');
+	await expect(results.first()).toBeVisible({ timeout: 5000 });
+	expect(await results.count()).toBeGreaterThan(0);
+});
+
+Then('User is redirected to the library browse page', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 5000 });
 });
 
 Then('Search input is focused', async function (this: AudiodWorld) {

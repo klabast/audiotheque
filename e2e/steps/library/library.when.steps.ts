@@ -283,6 +283,16 @@ When('User searches for {string}', async function (this: AudiodWorld, query: str
 	await input.fill(query);
 });
 
+When('User selects the {string} search scope', async function (this: AudiodWorld, scope: string) {
+	const page = this.getPage();
+	await page.locator(`[data-testid="search-scope-${scope}"]`).click();
+});
+
+When('User clears the search', async function (this: AudiodWorld) {
+	const page = this.getPage();
+	await page.locator('[data-testid="search-clear-button"]').click();
+});
+
 When('User presses the search shortcut', async function (this: AudiodWorld) {
 	const page = this.getPage();
 	await page.keyboard.press('Meta+k');
