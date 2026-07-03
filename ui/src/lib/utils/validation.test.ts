@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	PASSWORD_MIN_LENGTH,
 	PASSWORD_MAX_LENGTH,
 	RESET_CODE_LENGTH,
 	validatePassword,
@@ -12,12 +11,8 @@ describe('validatePassword', () => {
 		expect(validatePassword('').valid).toBe(false);
 	});
 
-	it('rejects a password one character below the minimum', () => {
-		expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1)).valid).toBe(false);
-	});
-
-	it('accepts a password at the minimum length', () => {
-		expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH)).valid).toBe(true);
+	it('accepts a single-character password (warn, do not block)', () => {
+		expect(validatePassword('p').valid).toBe(true);
 	});
 
 	it('accepts a password at the maximum length', () => {

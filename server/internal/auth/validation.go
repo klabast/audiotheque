@@ -8,11 +8,11 @@ import "fmt"
 // place — see ui/src/lib/utils/validation.ts for the frontend mirror; the
 // two must stay in sync.
 const (
-	// MinPasswordLength is 8. Below this, credential-set/reset endpoints
-	// reject the password outright. assessPassword (frontend) separately
-	// nudges users toward 12+ characters via a non-blocking warning — that
-	// UX layer is independent of this hard floor.
-	MinPasswordLength = 8
+	// MinPasswordLength is intentionally 1 (non-empty). Policy: warn, don't
+	// block — any non-empty password is accepted; the UI surfaces a
+	// non-blocking warning for short / equals-username via assessPassword.
+	// The weak-password e2e features are the spec for this behavior.
+	MinPasswordLength = 1
 	MaxPasswordLength = 64
 
 	MinUsernameLength = 2

@@ -9,8 +9,7 @@ func TestValidatePassword(t *testing.T) {
 		wantErr  bool
 	}{
 		{"empty", "", true},
-		{"one below minimum", "1234567", true},
-		{"at minimum", "12345678", false},
+		{"single character accepted (warn, don't block)", "p", false},
 		{"in range", "a-normal-password", false},
 		{"at maximum", makeString(MaxPasswordLength), false},
 		{"one above maximum", makeString(MaxPasswordLength + 1), true},

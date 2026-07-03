@@ -335,16 +335,29 @@ func TestHandleSetup(t *testing.T) {
 		}
 	})
 
-	t.Run("validation error per rule: password too short", func(t *testing.T) {
+	t.Run("validation error per rule: password too long", func(t *testing.T) {
 		handler, _ := newTestHandler()
 
 		w := doJSON(t, handler.HandleSetup, http.MethodPost, "/api/auth/setup", SetupRequest{
 			Username: "alice",
-			Password: "short1",
+			Password: makeString(MaxPasswordLength + 1),
 		})
 
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("short password is accepted (warn, don't block)", func(t *testing.T) {
+		handler, _ := newTestHandler()
+
+		w := doJSON(t, handler.HandleSetup, http.MethodPost, "/api/auth/setup", SetupRequest{
+			Username: "alice",
+			Password: "p",
+		})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 
@@ -402,7 +415,7 @@ func TestHandleConfirmPasswordReset(t *testing.T) {
 		}
 	})
 
-	t.Run("new password below minimum length", func(t *testing.T) {
+	t.Run("new password above maximum length", func(t *testing.T) {
 		handler, repo := newTestHandler()
 		user := repo.seedUser(1, "alice", "alicepass123", false)
 		if err := repo.StoreResetCode("ABCD1234", user.ID, time.Now().Add(30*time.Minute)); err != nil {
@@ -411,11 +424,28 @@ func TestHandleConfirmPasswordReset(t *testing.T) {
 
 		w := doJSON(t, handler.HandleConfirmPasswordReset, http.MethodPost, "/api/auth/password/reset/confirm", ConfirmPasswordResetRequest{
 			Code:        "ABCD1234",
-			NewPassword: "short1",
+			NewPassword: makeString(MaxPasswordLength + 1),
 		})
 
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("short new password is accepted (warn, don't block)", func(t *testing.T) {
+		handler, repo := newTestHandler()
+		user := repo.seedUser(1, "alice", "alicepass123", false)
+		if err := repo.StoreResetCode("ABCD1234", user.ID, time.Now().Add(30*time.Minute)); err != nil {
+			t.Fatalf("seed reset code: %v", err)
+		}
+
+		w := doJSON(t, handler.HandleConfirmPasswordReset, http.MethodPost, "/api/auth/password/reset/confirm", ConfirmPasswordResetRequest{
+			Code:        "ABCD1234",
+			NewPassword: "p",
+		})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }
