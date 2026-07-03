@@ -1,6 +1,5 @@
 import {
 	albumsApi,
-	apiConfig,
 	authApi,
 	devicesApi,
 	librariesApi,
@@ -9,7 +8,10 @@ import {
 	systemApi,
 	usersApi
 } from '$lib/api/client';
-import type { PlaybackSessionResponse } from '$lib/api/client';
+import type {
+	PlaybackSessionResponse,
+	SettingsDevice as GeneratedSettingsDevice
+} from '$lib/api/client';
 import { ResponseError, type InitOverrideFunction } from '$lib/api/generated/src/runtime';
 import { throwIfNotOk } from './api-error';
 import {
@@ -457,68 +459,69 @@ class ApiService {
 
 	// --- Settings: Devices ---
 
+	private toSettingsDevice(d: GeneratedSettingsDevice): SettingsDevice {
+		return {
+			ID: d.iD ?? '',
+			Name: d.name ?? '',
+			Type: d.type ?? '',
+			Address: d.address ?? '',
+			CreatedAt: d.createdAt ?? '',
+			UpdatedAt: d.updatedAt ?? ''
+		};
+	}
+
 	async listSettingsDevices(): Promise<SettingsDevice[]> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to list devices');
-		return response.json();
+		try {
+			const result = await settingsApi.listSettingsDevices();
+			return result.map((d) => this.toSettingsDevice(d));
+		} catch (err) {
+			return this.rethrow(err, 'Failed to list devices');
+		}
 	}
 
 	async createSettingsDevice(name: string, type: string, address: string): Promise<SettingsDevice> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ name, type, address })
-		});
-		await throwIfNotOk(response, 'Failed to create device');
-		return response.json();
+		try {
+			const result = await settingsApi.createSettingsDevice({ request: { name, type, address } });
+			return this.toSettingsDevice(result);
+		} catch (err) {
+			return this.rethrow(err, 'Failed to create device');
+		}
 	}
 
 	async updateSettingsDevice(id: string, name: string, address: string): Promise<SettingsDevice> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices/${id}`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ name, address })
-		});
-		await throwIfNotOk(response, 'Failed to update device');
-		return response.json();
+		try {
+			const result = await settingsApi.updateSettingsDevice({ id, request: { name, address } });
+			return this.toSettingsDevice(result);
+		} catch (err) {
+			return this.rethrow(err, 'Failed to update device');
+		}
 	}
 
 	async deleteSettingsDevice(id: string): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/devices/${id}`, {
-			method: 'DELETE',
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to delete device');
+		try {
+			await settingsApi.deleteSettingsDevice({ id });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to delete device');
+		}
 	}
 
 	// --- Settings: Streaming ---
 
 	async getStreamingSettings(): Promise<{ hostname: string }> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/streaming`, {
-			credentials: 'include'
-		});
-		await throwIfNotOk(response, 'Failed to get streaming settings');
-		return response.json();
+		try {
+			const result = await settingsApi.getStreamingSettings();
+			return { hostname: result.hostname ?? '' };
+		} catch (err) {
+			return this.rethrow(err, 'Failed to get streaming settings');
+		}
 	}
 
 	async updateStreamingSettings(hostname: string): Promise<void> {
-		const basePath = apiConfig.basePath ?? '';
-		const response = await fetch(`${basePath}/settings/streaming`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ hostname })
-		});
-		await throwIfNotOk(response, 'Failed to update streaming settings');
+		try {
+			await settingsApi.updateStreamingSettings({ request: { hostname } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to update streaming settings');
+		}
 	}
 
 	// --- Settings: Authentication toggle ---
