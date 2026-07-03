@@ -222,9 +222,7 @@ class ApiService {
 		return {
 			libraryId: result.libraryId ?? libraryId,
 			status: (result.status === 'error' ? 'failed' : result.status) as
-				| 'running'
-				| 'completed'
-				| 'failed',
+				'running' | 'completed' | 'failed',
 			totalFiles: result.totalFiles ?? 0,
 			processedFiles: result.processedFiles ?? 0,
 			tracksAdded: result.tracksAdded ?? 0,
