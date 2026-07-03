@@ -270,7 +270,23 @@ export const playback = (() => {
 			// The browser's <audio> 'ended' event is the only signal the
 			// backend can't observe directly for local playback. Translate
 			// it to a backend "next" command.
-			await this.next();
+			//
+			// If next() fails (e.g. the session was deleted server-side
+			// because this tab's deviceID briefly stopped resolving during a
+			// reconnect), don't leave the UI stuck showing the just-ended
+			// track as still "playing" — re-fetch the session from the
+			// server so the player reflects reality (a resumed session, or
+			// none at all) instead of silently doing nothing.
+			try {
+				await this.next();
+			} catch (err) {
+				console.error('[playback] onTrackEnded: next() failed, refetching session', err);
+				try {
+					session = ((await api.getPlaybackSession()) as PlaybackSessionResponse) ?? null;
+				} catch (refetchErr) {
+					console.error('[playback] onTrackEnded: session refetch also failed', refetchErr);
+				}
+			}
 		},
 
 		// Test seam: synchronously inject a session state. Production code

@@ -72,6 +72,9 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Capture User-Agent before upgrade — once we hijack the connection the
 	// http.Request's headers are still valid but it's cleaner to grab it now.
 	userAgent := r.Header.Get("User-Agent")
+	// Client-supplied stable device ID (sessionStorage UUID), if any. See
+	// ServeWs for the validation and fallback.
+	clientID := r.URL.Query().Get("clientId")
 
 	// Authenticate before upgrading. A userID=0 connection would still receive
 	// every Hub.Broadcast and could submit incoming messages, so fail closed.
@@ -92,5 +95,5 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Serve the WebSocket connection through the hub
-	ServeWs(h.hub, conn, userID, userAgent)
+	ServeWs(h.hub, conn, userID, userAgent, clientID)
 }

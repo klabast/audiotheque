@@ -260,6 +260,58 @@ describe('playback store — isLocalAudio requires a real ID match', () => {
 	});
 });
 
+describe('playback store — onTrackEnded error handling', () => {
+	// Regression test for "track ends, player just hangs": if the server
+	// rejects/loses the session (e.g. deviceID briefly unresolvable during a
+	// WS reconnect), onTrackEnded must not swallow the error silently — it
+	// has to refetch the session so the UI reflects what the backend
+	// actually has (a resumed session, or none), rather than staying stuck
+	// showing the just-ended track as still playing.
+	it('refetches the session from the server when next() fails', async () => {
+		setupApiMock();
+		const { playback } = await import('./playback.svelte');
+		await playback.loadSession();
+
+		const { api } = await import('$lib/services/api');
+		vi.mocked(api.nextTrack).mockRejectedValue(new Error('no active session'));
+		vi.mocked(api.getPlaybackSession).mockResolvedValue({
+			state: 'stopped',
+			deviceId: '',
+			current: null,
+			queue: [],
+			source: null
+		} as never);
+
+		await playback.onTrackEnded();
+
+		expect(api.nextTrack).toHaveBeenCalled();
+		expect(api.getPlaybackSession).toHaveBeenCalled();
+		expect(playback.isStopped).toBe(true);
+	});
+
+	it('does not refetch the session when next() succeeds', async () => {
+		setupApiMock();
+		const { playback } = await import('./playback.svelte');
+		await playback.loadSession();
+
+		const { api } = await import('$lib/services/api');
+		vi.mocked(api.nextTrack).mockResolvedValue({
+			state: 'playing',
+			deviceId: '',
+			current: { trackId: 6, position: 0 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		} as never);
+
+		await playback.onTrackEnded();
+
+		expect(api.nextTrack).toHaveBeenCalled();
+		// getPlaybackSession was already called once by loadSession() above;
+		// it must not be called again on the happy path.
+		expect(api.getPlaybackSession).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('playback store — WS-driven device transfers', () => {
 	it('pauses local audio when a WS session moves playback AWAY from this tab', async () => {
 		const { sessionListeners, clientIdListeners } = setupApiMock();

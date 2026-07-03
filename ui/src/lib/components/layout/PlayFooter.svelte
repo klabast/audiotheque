@@ -115,6 +115,25 @@
 	const devices = $derived(playback.devices);
 	const currentDeviceId = $derived(playback.deviceId);
 
+	// === ENDED WATCHDOG ===
+	// Guards the primary "track ends, player hangs" failure mode: the
+	// `onended` handler on the <audio> element is the only advance trigger
+	// for local playback, and it can fail to fire or fail to advance (e.g.
+	// the session was briefly unresolvable during a WS reconnect, so
+	// onTrackEnded's next() no-ops). timeupdate keeps firing on some browsers
+	// even after the element reports ended, so it doubles as a second look:
+	// if the element says ended but the store still thinks this track is
+	// playing, force the advance once per track.
+	let watchdogFiredForTrack: number | null = null;
+	function checkEndedWatchdog() {
+		if (!isLocal || !audioRef?.ended || !playback.isPlaying) return;
+		const trackId = playback.currentTrackId;
+		if (trackId === null || watchdogFiredForTrack === trackId) return;
+		watchdogFiredForTrack = trackId;
+		console.warn('[PlayFooter] ended watchdog: forcing advance — onended did not fire');
+		playback.onTrackEnded();
+	}
+
 	// === BACKEND POSITION REPORTING (browser-as-device only) ===
 	// The audio element's clock is the only thing the backend can't observe
 	// for local playback. Push it back so the saved position stays current
@@ -122,6 +141,7 @@
 	const POSITION_SYNC_INTERVAL_MS = 500;
 	let lastPositionSent = 0;
 	function handleTimeUpdate() {
+		checkEndedWatchdog();
 		if (!isLocal) return;
 		if (audioRef?.paused) return;
 		const now = Date.now();

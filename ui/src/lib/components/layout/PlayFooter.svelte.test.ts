@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import '@testing-library/jest-dom/vitest';
 import PlayFooter from './PlayFooter.svelte';
 import { playback } from '$lib/stores/playback.svelte';
+import { api } from '$lib/services/api';
 
 // Captured clientId listeners so tests can simulate the WS welcome that
 // assigns this tab its hub client ID. "Local audio" depends on a real ID
@@ -125,5 +126,81 @@ describe('PlayFooter — local audio element rendering', () => {
 		await tick();
 
 		expect(screen.queryByTestId('audio-element')).toBeInTheDocument();
+	});
+});
+
+describe('PlayFooter — ended watchdog', () => {
+	// Regression coverage for "track ends, player just hangs": the browser's
+	// `onended` is the only advance trigger, and it can fail to fire (or fail
+	// to advance) — timeupdate keeps ticking, so it's used as a second look:
+	// if the element reports ended but the session still says playing, force
+	// the advance.
+	it('forces an advance when the audio element reports ended but the session still says playing', async () => {
+		render(PlayFooter);
+		await new Promise((r) => setTimeout(r, 0));
+
+		assignClientId('tab-A');
+		playback.updateSession({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 5, position: 179 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		});
+		await tick();
+
+		const audio = screen.getByTestId('audio-element') as HTMLAudioElement;
+		Object.defineProperty(audio, 'ended', { configurable: true, value: true });
+
+		vi.mocked(api.nextTrack).mockResolvedValue({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 6, position: 0 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		} as never);
+
+		await fireEvent.timeUpdate(audio);
+		// Let the onTrackEnded() -> next() async chain settle.
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(api.nextTrack).toHaveBeenCalledTimes(1);
+	});
+
+	it('fires at most once per track even across repeated timeupdate ticks', async () => {
+		render(PlayFooter);
+		await new Promise((r) => setTimeout(r, 0));
+
+		assignClientId('tab-A');
+		playback.updateSession({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 5, position: 179 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		});
+		await tick();
+
+		const audio = screen.getByTestId('audio-element') as HTMLAudioElement;
+		Object.defineProperty(audio, 'ended', { configurable: true, value: true });
+
+		// next() fails, so the session (and its trackId) never changes — proves
+		// the per-track guard, not a side-effect of a new session, prevents
+		// the second firing.
+		vi.mocked(api.nextTrack).mockRejectedValue(new Error('no active session'));
+		vi.mocked(api.getPlaybackSession).mockResolvedValue({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 5, position: 179 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		} as never);
+
+		await fireEvent.timeUpdate(audio);
+		await new Promise((r) => setTimeout(r, 0));
+		await fireEvent.timeUpdate(audio);
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(api.nextTrack).toHaveBeenCalledTimes(1);
 	});
 });
