@@ -9,10 +9,11 @@
 		artistName?: string;
 		coverUrl?: string;
 		isHiRes?: boolean;
+		year?: string;
 		onplay?: () => void;
 	}
 
-	let { id, title, artistName, coverUrl, isHiRes = false, onplay }: Props = $props();
+	let { id, title, artistName, coverUrl, isHiRes = false, year, onplay }: Props = $props();
 
 	// Library grid renders the smaller `?size=thumb` variant — full covers are
 	// reserved for the album detail page. Thumbnails are ≈400px JPEG q85, so
@@ -60,5 +61,10 @@
 		<p class="text-text-secondary truncate text-xs">
 			{artistName || 'Unknown Artist'}
 		</p>
+		{#if year}
+			<p class="text-text-secondary/70 truncate text-[11px]" data-testid="album-year-{id}">
+				{year}
+			</p>
+		{/if}
 	</a>
 </div>

@@ -38,6 +38,14 @@
 	let hiResOnly = $derived($page.url.searchParams.get('hiRes') === 'true');
 	let sortLevels = $derived(parseSort($page.url.searchParams.get('sort')));
 	let isAdmin = $derived(auth.user?.isAdmin ?? false);
+	let showYear = $derived(
+		sortLevels[0]?.field === 'album-artist' && sortLevels[1]?.field === 'year'
+	);
+
+	function extractYear(releaseDate: string | undefined): string | undefined {
+		const prefix = releaseDate?.slice(0, 4);
+		return prefix && /^\d{4}$/.test(prefix) ? prefix : undefined;
+	}
 
 	function parseSort(raw: string | null): [SortLevel, SortLevel] {
 		if (!raw) return [{ ...DEFAULT_SORT[0] }, { ...DEFAULT_SORT[1] }];
@@ -361,6 +369,7 @@
 									title={album.title!}
 									artistName={album.artistName}
 									isHiRes={album.isHiRes ?? false}
+									year={showYear ? extractYear(album.releaseDate) : undefined}
 									onplay={() => playback.playAlbum(album.id!)}
 								/>
 							{/each}
@@ -377,6 +386,7 @@
 							title={album.title!}
 							artistName={album.artistName}
 							isHiRes={album.isHiRes ?? false}
+							year={showYear ? extractYear(album.releaseDate) : undefined}
 							onplay={() => playback.playAlbum(album.id!)}
 						/>
 					{/each}
