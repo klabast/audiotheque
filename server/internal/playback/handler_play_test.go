@@ -15,6 +15,11 @@ type stubService struct {
 	playAlbumOnDeviceCalled bool
 	lastDeviceID            string
 	lastTransferDeviceID    string
+	// err, when set, is returned by every session-mutating method so tests can
+	// exercise the handler's error mapping.
+	err          error
+	caps         *DeviceCapabilities
+	capsDeviceID string
 }
 
 func (s *stubService) PlayAlbum(userID, albumID, startTrackID int64) (*Session, error) {
@@ -22,22 +27,46 @@ func (s *stubService) PlayAlbum(userID, albumID, startTrackID int64) (*Session, 
 	return nil, errors.New("stub: PlayAlbum should not be reached")
 }
 func (s *stubService) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceID string) (*Session, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
 	s.playAlbumOnDeviceCalled = true
 	s.lastDeviceID = deviceID
 	return &Session{UserID: userID, State: StatePlaying, DeviceID: deviceID,
 		Current: &CurrentTrack{TrackID: 1, Position: 0}}, nil
 }
-func (s *stubService) GetSession(userID int64) (*Session, error)        { return nil, nil }
-func (s *stubService) Pause(userID int64, p int) (*Session, error)      { return nil, nil }
-func (s *stubService) Resume(userID int64) (*Session, error)            { return nil, nil }
-func (s *stubService) Next(userID int64) (*Session, error)              { return nil, nil }
-func (s *stubService) Previous(userID int64) (*Session, error)          { return nil, nil }
+func (s *stubService) GetSession(userID int64) (*Session, error) { return nil, s.err }
+func (s *stubService) Pause(userID int64, p int) (*Session, error) {
+	return s.emptySession(userID)
+}
+func (s *stubService) Resume(userID int64) (*Session, error)   { return s.emptySession(userID) }
+func (s *stubService) Next(userID int64) (*Session, error)     { return s.emptySession(userID) }
+func (s *stubService) Previous(userID int64) (*Session, error) { return s.emptySession(userID) }
 func (s *stubService) TransferPlayback(u int64, d string) (*Session, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
 	s.lastTransferDeviceID = d
 	return &Session{UserID: u, DeviceID: d}, nil
 }
-func (s *stubService) SeekTrack(userID int64, p int) (*Session, error) { return nil, nil }
-func (s *stubService) SetVolume(userID int64, v int) (*Session, error) { return nil, nil }
+func (s *stubService) SeekTrack(userID int64, p int) (*Session, error) {
+	return s.emptySession(userID)
+}
+func (s *stubService) SetVolume(userID int64, v int) (*Session, error) {
+	return s.emptySession(userID)
+}
+
+func (s *stubService) DeviceCapabilities(deviceID string) *DeviceCapabilities {
+	s.capsDeviceID = deviceID
+	return s.caps
+}
+
+func (s *stubService) emptySession(userID int64) (*Session, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &Session{UserID: userID, State: StatePlaying, DeviceID: "stub"}, nil
+}
 
 // TDD: When the request body omits `deviceId` but the requesting tab carries
 // its hub client ID in `X-Audiod-Client-Id`, the handler must default the play

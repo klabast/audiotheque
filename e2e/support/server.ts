@@ -22,24 +22,6 @@ export async function getServerLogs(): Promise<string> {
 }
 
 /**
- * Parse reset code from server logs
- * Expected format: "RESET CODE: ABC123" or similar
- */
-export function parseResetCode(logs: string): string {
-  // Match various formats:
-  // - "RESET CODE: ABC123"
-  // - "Reset code: ABC123"
-  // - "[RESET] Code: ABC123"
-  const match = logs.match(/RESET[\s\w]*CODE[:\s]+([A-Z0-9]+)/i);
-
-  if (!match || !match[1]) {
-    throw new Error('Reset code not found in server logs. Logs: ' + logs.slice(-500));
-  }
-
-  return match[1];
-}
-
-/**
  * Wait for a condition to be true with timeout
  */
 export async function waitFor(

@@ -12,9 +12,9 @@ func NewLibraryTrackProvider(libraryService *library.Service) *LibraryTrackProvi
 	return &LibraryTrackProvider{libraryService: libraryService}
 }
 
-// GetAlbumTracks returns tracks for an album
-func (p *LibraryTrackProvider) GetAlbumTracks(albumID int64) ([]Track, error) {
-	tracksWithArtist, err := p.libraryService.ListTracksByAlbum(albumID)
+// GetAlbumTracks returns tracks for an album the user can access.
+func (p *LibraryTrackProvider) GetAlbumTracks(userID, albumID int64) ([]Track, error) {
+	tracksWithArtist, err := p.libraryService.ListTracksByAlbum(userID, albumID)
 	if err != nil {
 		return nil, err
 	}

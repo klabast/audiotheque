@@ -40,6 +40,15 @@ func (m *mockRepository) Create(username, passwordHash string, isAdmin bool) (*U
 	return user, nil
 }
 
+// CreateFirstAdmin mirrors the SQLite repository's conditional insert: it
+// succeeds only while no user exists.
+func (m *mockRepository) CreateFirstAdmin(username, passwordHash string) (*User, error) {
+	if len(m.usersID) > 0 {
+		return nil, ErrSetupAlreadyCompleted
+	}
+	return m.Create(username, passwordHash, true)
+}
+
 func (m *mockRepository) UpdatePassword(userID int64, newPasswordHash string) error {
 	user, exists := m.usersID[userID]
 	if !exists {
@@ -297,11 +306,14 @@ func TestUpdatePassword_ValidCurrentPassword_UpdatesPassword(t *testing.T) {
 	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Update password
-	err = service.UpdatePassword(1, "oldpassword", "newpassword")
+	sessionID, err := service.UpdatePassword(1, "oldpassword", "newpassword", SessionContext{})
 
-	// Assert: Should succeed and update password hash
+	// Assert: Should succeed, update the hash, and hand back a fresh session
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+	if sessionID == "" {
+		t.Error("expected a replacement session for the caller, got an empty id")
 	}
 
 	// Verify new password works for login

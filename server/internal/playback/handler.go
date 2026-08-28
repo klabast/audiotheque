@@ -104,6 +104,9 @@ type ServiceInterface interface {
 	TransferPlayback(userID int64, targetDeviceID string) (*Session, error)
 	SeekTrack(userID int64, position int) (*Session, error)
 	SetVolume(userID int64, volume int) (*Session, error)
+	// DeviceCapabilities reports what the named device can do. Device I/O
+	// belongs to the service, which owns the resolver.
+	DeviceCapabilities(deviceID string) *DeviceCapabilities
 }
 
 // TrackStore defines methods for retrieving tracks and checking access
@@ -129,7 +132,6 @@ type Handler struct {
 	trackStore           TrackStore
 	deviceRegistry       DeviceRegistry
 	browserRegistry      *BrowserDeviceRegistry
-	deviceResolver       DeviceResolver
 }
 
 // NewHandler creates a new playback handler
@@ -165,27 +167,33 @@ func (h *Handler) SetBrowserRegistry(registry *BrowserDeviceRegistry) {
 	h.browserRegistry = registry
 }
 
-// SetDeviceResolver wires the resolver used by the SessionResponse capability
-// hint. When set, every session response carries a deviceCapabilities object
-// describing what the active device can/can't do (e.g. mixerless MPD reports
-// volume=false). When unset, the hint is omitted entirely.
-func (h *Handler) SetDeviceResolver(resolver DeviceResolver) {
-	h.deviceResolver = resolver
-}
-
-// capabilitiesFor returns a CapabilitiesFn that probes the wired resolver
-// and reports per-device capabilities. Returns nil when no resolver is set,
-// so SessionToResponse omits the field.
+// capabilitiesFor returns the CapabilitiesFn used to fill the session
+// response's device hint. The service owns the device resolver and therefore
+// the I/O; the handler only passes the function along.
 func (h *Handler) capabilitiesFor() CapabilitiesFn {
-	if h.deviceResolver == nil {
+	if h.service == nil {
 		return nil
 	}
-	return func(deviceID string) *DeviceCapabilities {
-		device, err := h.deviceResolver.ResolveDevice(deviceID)
-		if err != nil {
-			return nil
-		}
-		return &DeviceCapabilities{Volume: device.SupportsVolume()}
+	return h.service.DeviceCapabilities
+}
+
+// writeServiceError maps a service error to an accurate status code and a
+// message safe to hand a client. The wrapped error is never echoed: it carries
+// MPD host addresses and other internals.
+func writeServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrNoSession):
+		http.Error(w, "No active session", http.StatusNotFound)
+	case errors.Is(err, ErrNoDevice):
+		http.Error(w, "No playback device assigned to session", http.StatusConflict)
+	case errors.Is(err, ErrDeviceNotFound):
+		http.Error(w, "Playback device not found", http.StatusNotFound)
+	case errors.Is(err, ErrDeviceUnreachable):
+		http.Error(w, "Playback device is unreachable", http.StatusBadGateway)
+	case errors.Is(err, ErrAccessDenied):
+		http.Error(w, "Access denied", http.StatusForbidden)
+	default:
+		http.Error(w, "Playback operation failed", http.StatusInternalServerError)
 	}
 }
 
@@ -214,6 +222,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // @Success 200 {object} SessionResponse
 // @Failure 400 {string} string "Bad request"
 // @Failure 401 {string} string "Unauthorized"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/play [post]
 // @ID play
 func (h *Handler) HandlePlay(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +249,7 @@ func (h *Handler) HandlePlay(w http.ResponseWriter, r *http.Request) {
 	// still can't, reject — the legacy "empty means this tab" sentinel is
 	// gone, and silently guessing locality is what produced the dual-playback
 	// bug across browser tabs.
-	deviceID, err := h.resolvePlayTarget(r, req.DeviceID)
+	deviceID, err := h.resolvePlayTarget(r, userID, req.DeviceID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -247,7 +257,7 @@ func (h *Handler) HandlePlay(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.PlayAlbumOnDevice(userID, req.AlbumID, req.TrackID, deviceID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -264,8 +274,14 @@ func (h *Handler) HandlePlay(w http.ResponseWriter, r *http.Request) {
 // is available — e.g. an unauthenticated client, a tab whose WebSocket hasn't
 // welcomed yet, or a stale forged ID — return an error so the handler can
 // reject with 400.
-func (h *Handler) resolvePlayTarget(r *http.Request, explicitDeviceID string) (string, error) {
+func (h *Handler) resolvePlayTarget(r *http.Request, userID int64, explicitDeviceID string) (string, error) {
 	if explicitDeviceID != "" {
+		// MPD devices are shared by design and pass straight through. A
+		// browser tab is not: it belongs to whoever opened it, so binding a
+		// session to someone else's tab has to be refused.
+		if !h.browserTabBelongsTo(explicitDeviceID, userID) {
+			return "", errors.New("device is not addressable by this user")
+		}
 		return explicitDeviceID, nil
 	}
 	clientID := r.Header.Get("X-Audiod-Client-Id")
@@ -278,7 +294,25 @@ func (h *Handler) resolvePlayTarget(r *http.Request, explicitDeviceID string) (s
 	if _, ok := h.browserRegistry.Get(clientID); !ok {
 		return "", errors.New("no playback device assigned: client id is not a registered browser tab")
 	}
+	if !h.browserTabBelongsTo(clientID, userID) {
+		return "", errors.New("device is not addressable by this user")
+	}
 	return clientID, nil
+}
+
+// browserTabBelongsTo reports whether deviceID is safe for userID to target.
+// True for anything that isn't a registered browser tab (MPD devices), and for
+// tabs that are either the user's own or still anonymous — a tab whose
+// WebSocket connected before the user authenticated has UserID 0.
+func (h *Handler) browserTabBelongsTo(deviceID string, userID int64) bool {
+	if h.browserRegistry == nil {
+		return true
+	}
+	tab, ok := h.browserRegistry.Get(deviceID)
+	if !ok {
+		return true
+	}
+	return tab.UserID == 0 || tab.UserID == userID
 }
 
 // HandleGetSession handles GET /api/playback/session
@@ -300,7 +334,7 @@ func (h *Handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.GetSession(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -433,7 +467,9 @@ func (h *Handler) HandleStreamTrack(w http.ResponseWriter, r *http.Request) {
 // @Param request body PauseRequest true "Pause request with position"
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/pause [post]
 // @ID pause
 func (h *Handler) HandlePause(w http.ResponseWriter, r *http.Request) {
@@ -451,7 +487,7 @@ func (h *Handler) HandlePause(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.Pause(userID, req.Position)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -468,7 +504,9 @@ func (h *Handler) HandlePause(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/resume [post]
 // @ID resume
 func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
@@ -480,7 +518,7 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.Resume(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -497,7 +535,9 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/next [post]
 // @ID next
 func (h *Handler) HandleNext(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +549,7 @@ func (h *Handler) HandleNext(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.Next(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -526,7 +566,9 @@ func (h *Handler) HandleNext(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/previous [post]
 // @ID previous
 func (h *Handler) HandlePrevious(w http.ResponseWriter, r *http.Request) {
@@ -538,7 +580,7 @@ func (h *Handler) HandlePrevious(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.Previous(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -557,7 +599,9 @@ func (h *Handler) HandlePrevious(w http.ResponseWriter, r *http.Request) {
 // @Param request body TransferRequest true "Transfer request"
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/transfer [post]
 // @ID transferPlayback
 func (h *Handler) HandleTransfer(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +620,7 @@ func (h *Handler) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 	// Same invariant as HandlePlay: a transfer must name a real device.
 	// Empty body deviceId is interpreted as "to me" — derived from the WS
 	// client ID. No anonymous "to the browser" handoffs.
-	deviceID, err := h.resolvePlayTarget(r, req.DeviceID)
+	deviceID, err := h.resolvePlayTarget(r, userID, req.DeviceID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -584,7 +628,7 @@ func (h *Handler) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.TransferPlayback(userID, deviceID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -603,7 +647,9 @@ func (h *Handler) HandleTransfer(w http.ResponseWriter, r *http.Request) {
 // @Param request body SeekRequest true "Seek request"
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/seek [post]
 // @ID seek
 func (h *Handler) HandleSeek(w http.ResponseWriter, r *http.Request) {
@@ -621,7 +667,7 @@ func (h *Handler) HandleSeek(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.SeekTrack(userID, req.Position)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -640,7 +686,9 @@ func (h *Handler) HandleSeek(w http.ResponseWriter, r *http.Request) {
 // @Param request body VolumeRequest true "Volume request"
 // @Success 200 {object} SessionResponse
 // @Failure 401 {string} string "Unauthorized"
-// @Failure 404 {string} string "No active session"
+// @Failure 404 {string} string "No active session or device"
+// @Failure 409 {string} string "Session has no playback device"
+// @Failure 502 {string} string "Playback device unreachable"
 // @Router /playback/volume [post]
 // @ID setVolume
 func (h *Handler) HandleVolume(w http.ResponseWriter, r *http.Request) {
@@ -658,7 +706,7 @@ func (h *Handler) HandleVolume(w http.ResponseWriter, r *http.Request) {
 
 	session, err := h.service.SetVolume(userID, req.Volume)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeServiceError(w, err)
 		return
 	}
 
@@ -707,19 +755,16 @@ func (h *Handler) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.browserRegistry != nil {
 		browsers := h.browserRegistry.ListByUser(userID)
 		// Put the current device first, then the rest in registration order.
-		thisIdx := -1
-		for i, b := range browsers {
+		for _, b := range browsers {
 			if b.ClientID == thisClientID {
-				thisIdx = i
+				resp = append(resp, DeviceResponse{ID: b.ClientID, Name: b.Name, Type: "browser", IsCurrent: true})
 				break
 			}
 		}
-		if thisIdx >= 0 {
-			b := browsers[thisIdx]
-			resp = append(resp, DeviceResponse{ID: b.ClientID, Name: b.Name, Type: "browser", IsCurrent: true})
-			browsers = append(browsers[:thisIdx], browsers[thisIdx+1:]...)
-		}
 		for _, b := range browsers {
+			if b.ClientID == thisClientID {
+				continue
+			}
 			resp = append(resp, DeviceResponse{ID: b.ClientID, Name: b.Name, Type: "browser"})
 		}
 	}

@@ -126,6 +126,33 @@ func TestBrowserDeviceRegistry_ReconnectCancelsGraceRemoval(t *testing.T) {
 	}
 }
 
+// P1-6: the grace timer's closure deleted unconditionally. If it had already
+// fired and was waiting on the mutex when Register ran, timer.Stop() returned
+// false, Register stored the fresh device, and the late closure then deleted
+// it — a tab reconnecting right at the 60s mark simply vanished.
+func TestBrowserDeviceRegistry_LateGraceTimerKeepsReconnectedDevice(t *testing.T) {
+	withDisconnectGracePeriod(t, time.Hour) // never fires on its own
+	r := NewBrowserDeviceRegistry()
+
+	r.Register("c1", 42, "Chrome on macOS")
+	r.Unregister("c1")
+
+	r.mu.RLock()
+	stale := r.pendingRemoval["c1"]
+	r.mu.RUnlock()
+	if stale == nil {
+		t.Fatal("precondition: Unregister must arm a removal")
+	}
+
+	// The tab reconnects, then the already-fired timer finally gets the mutex.
+	r.Register("c1", 42, "Chrome on macOS")
+	r.expireRemoval("c1", stale)
+
+	if _, ok := r.Get("c1"); !ok {
+		t.Fatal("a grace timer from before the reconnect removed the freshly registered device")
+	}
+}
+
 // TestBrowserDeviceRegistry_UnregisterExpiresWithoutReconnect is the other
 // half: with no reconnect, the device must actually disappear once the grace
 // period elapses — otherwise stale devices/sessions would live forever.

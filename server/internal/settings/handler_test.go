@@ -24,9 +24,11 @@ func (m *mockAuthRepository) GetByID(id int64) (*auth.User, error) {
 	}
 	return nil, auth.ErrUserNotFound
 }
-func (m *mockAuthRepository) GetByUsername(string) (*auth.User, error)   { return nil, auth.ErrUserNotFound }
-func (m *mockAuthRepository) GetUserCount() (int, error)                 { return len(m.users), nil }
-func (m *mockAuthRepository) GetAdminCount() (int, error)                { return 1, nil }
+func (m *mockAuthRepository) GetByUsername(string) (*auth.User, error) {
+	return nil, auth.ErrUserNotFound
+}
+func (m *mockAuthRepository) GetUserCount() (int, error)  { return len(m.users), nil }
+func (m *mockAuthRepository) GetAdminCount() (int, error) { return 1, nil }
 func (m *mockAuthRepository) GetFirstAdmin() (*auth.User, error) {
 	for _, u := range m.users {
 		if u.IsAdmin {
@@ -44,13 +46,16 @@ func (m *mockAuthRepository) ListUsers() ([]*auth.User, error) {
 }
 func (m *mockAuthRepository) Delete(int64) error                              { return nil }
 func (m *mockAuthRepository) Create(string, string, bool) (*auth.User, error) { return nil, nil }
-func (m *mockAuthRepository) UpdatePassword(int64, string) error         { return nil }
+func (m *mockAuthRepository) CreateFirstAdmin(string, string) (*auth.User, error) {
+	return nil, auth.ErrSetupAlreadyCompleted
+}
+func (m *mockAuthRepository) UpdatePassword(int64, string) error            { return nil }
 func (m *mockAuthRepository) StoreResetCode(string, int64, time.Time) error { return nil }
 func (m *mockAuthRepository) GetResetCode(string) (*auth.ResetCode, error) {
 	return nil, auth.ErrInvalidResetCode
 }
-func (m *mockAuthRepository) DeleteResetCode(string) error        { return nil }
-func (m *mockAuthRepository) DeleteExpiredResetCodes() error      { return nil }
+func (m *mockAuthRepository) DeleteResetCode(string) error         { return nil }
+func (m *mockAuthRepository) DeleteExpiredResetCodes() error       { return nil }
 func (m *mockAuthRepository) DeleteResetCodesByUserID(int64) error { return nil }
 
 // testSessionRepo is shared between createTestAuthService and addAuthCookie

@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func setStreamTestSecret(t *testing.T) {
@@ -56,17 +58,25 @@ func TestValidateStreamToken_Expired(t *testing.T) {
 	}
 }
 
-// A regular session JWT (no `kind: stream`) must not be accepted as a stream
-// token, even though it's signed with the same secret.
-func TestValidateStreamToken_RejectsSessionJWT(t *testing.T) {
+// A JWT without `kind: stream` must not be accepted as a stream token, even
+// though it's signed with the same secret.
+func TestValidateStreamToken_RejectsNonStreamJWT(t *testing.T) {
 	setStreamTestSecret(t)
 
-	sessionToken, err := GenerateToken(7, "alice")
+	secret, err := getJWTSecret()
 	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
+		t.Fatalf("getJWTSecret: %v", err)
 	}
-	if _, err := ValidateStreamToken(sessionToken, 42); err == nil {
-		t.Fatal("expected error when validating session JWT as stream token")
+	other := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": 7,
+		"exp":     time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := other.SignedString(secret)
+	if err != nil {
+		t.Fatalf("sign non-stream token: %v", err)
+	}
+	if _, err := ValidateStreamToken(signed, 42); err == nil {
+		t.Fatal("expected error when validating a non-stream JWT as a stream token")
 	}
 }
 

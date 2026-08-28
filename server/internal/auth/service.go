@@ -3,14 +3,9 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/base32"
-	"encoding/json"
-	"fmt"
 	"log"
-	"os"
-	"path/filepath"
+	"sync"
 	"time"
-
-	"audiod/internal/config"
 )
 
 // Repository defines the interface for user data access
@@ -27,6 +22,12 @@ type Repository interface {
 	// settings panel.
 	ListUsers() ([]*User, error)
 	Create(username, passwordHash string, isAdmin bool) (*User, error)
+	// CreateFirstAdmin inserts the initial admin only while the user table is
+	// still empty, in a single statement, returning ErrSetupAlreadyCompleted
+	// otherwise. /api/auth/setup is unauthenticated and hashing takes ~100ms,
+	// so a check-then-insert leaves a wide window in which two requests both
+	// see an empty table and both succeed — the second one an attacker's admin.
+	CreateFirstAdmin(username, passwordHash string) (*User, error)
 	// Delete removes a user row. Cascades to dependent rows (sessions,
 	// reset codes, etc.) via FK ON DELETE CASCADE.
 	Delete(userID int64) error
@@ -42,9 +43,10 @@ type Repository interface {
 
 // Service handles authentication business logic
 type Service struct {
-	repo          Repository
-	sessions      SessionRepository
-	authEnabledFn func() (bool, error)
+	repo           Repository
+	sessions       SessionRepository
+	resetCodeFiles resetCodeFiles
+	authEnabledFn  func() (bool, error)
 }
 
 // NewService creates a new auth service. The session repository may be nil
@@ -52,7 +54,7 @@ type Service struct {
 // cookies) — every HTTP path that authenticates a browser request must
 // construct the Service with a real SessionRepository.
 func NewService(repo Repository, sessions SessionRepository) *Service {
-	return &Service{repo: repo, sessions: sessions}
+	return &Service{repo: repo, sessions: sessions, resetCodeFiles: newResetCodeFileStore()}
 }
 
 // SetAuthEnabledFn wires the settings-backed auth-enabled lookup. Kept as a
@@ -93,12 +95,35 @@ type SessionContext struct {
 	IP         string
 }
 
+// decoyPasswordHash is a valid Argon2id hash of a value nobody can supply. An
+// unknown username is verified against it so the response time of "no such
+// user" matches "wrong password" instead of returning ~100ms sooner and
+// confirming which usernames exist.
+var decoyPasswordHash = sync.OnceValue(func() string {
+	decoy, err := generateSessionID()
+	if err != nil {
+		return ""
+	}
+	hash, err := HashPassword(decoy)
+	if err != nil {
+		return ""
+	}
+	return hash
+})
+
+func verifyAgainstDecoy(password string) {
+	if hash := decoyPasswordHash(); hash != "" {
+		_, _ = VerifyPassword(password, hash)
+	}
+}
+
 // Authenticate verifies credentials and returns the user without creating
 // a session. CLI commands and other non-HTTP paths use this to gate admin
 // operations on a username/password without writing a cookie-backed session.
 func (s *Service) Authenticate(username, password string) (*User, error) {
 	user, err := s.repo.GetByUsername(username)
 	if err != nil {
+		verifyAgainstDecoy(password)
 		return nil, ErrInvalidPassword
 	}
 	valid, err := VerifyPassword(password, user.PasswordHash)
@@ -115,23 +140,11 @@ func (s *Service) Authenticate(username, password string) (*User, error) {
 // plus the authenticated user. The session row is persisted; logout/revoke
 // drops it.
 func (s *Service) Login(username, password string, ctx SessionContext) (string, *User, error) {
-	// Get user from repository
-	user, err := s.repo.GetByUsername(username)
-	if err != nil {
-		return "", nil, ErrInvalidPassword
-	}
-
-	// Verify password
-	valid, err := VerifyPassword(password, user.PasswordHash)
+	user, err := s.Authenticate(username, password)
 	if err != nil {
 		return "", nil, err
 	}
 
-	if !valid {
-		return "", nil, ErrInvalidPassword
-	}
-
-	// Open a session for this login
 	sessionID, err := s.CreateSession(user.ID, ctx)
 	if err != nil {
 		return "", nil, err
@@ -142,23 +155,19 @@ func (s *Service) Login(username, password string, ctx SessionContext) (string, 
 
 // CreateSession inserts a new session row for userID and returns the cookie
 // value (the row's opaque id). Window is 30d by default, 90d when
-// RememberMe is set — see SessionWindowDefault / SessionWindowRemember.
+// RememberMe is set — see SessionWindowFor.
 func (s *Service) CreateSession(userID int64, ctx SessionContext) (string, error) {
 	id, err := generateSessionID()
 	if err != nil {
 		return "", err
 	}
 	now := time.Now().UTC()
-	window := SessionWindowDefault
-	if ctx.RememberMe {
-		window = SessionWindowRemember
-	}
 	sess := &Session{
 		ID:         id,
 		UserID:     userID,
 		CreatedAt:  now,
 		LastSeenAt: now,
-		ExpiresAt:  now.Add(window),
+		ExpiresAt:  now.Add(SessionWindowFor(ctx.RememberMe)),
 		RememberMe: ctx.RememberMe,
 		UserAgent:  ctx.UserAgent,
 		LastIP:     ctx.IP,
@@ -195,12 +204,7 @@ func (s *Service) ValidateSession(id, ip string) (*User, *Session, error) {
 	}
 
 	// Sliding renewal: bump expires_at when less than half the window remains.
-	// Window is determined per-session by remember_me so the two TTLs (30d /
-	// 90d) renew consistently with the original login choice.
-	window := SessionWindowDefault
-	if sess.RememberMe {
-		window = SessionWindowRemember
-	}
+	window := SessionWindowFor(sess.RememberMe)
 	newExpiresAt := sess.ExpiresAt
 	if sess.ExpiresAt.Sub(now) < window/2 {
 		newExpiresAt = now.Add(window)
@@ -222,6 +226,19 @@ func (s *Service) ValidateSession(id, ip string) (*User, *Session, error) {
 	return user, sess, nil
 }
 
+// SessionRememberMe reports the "keep me logged in" choice recorded on a
+// session. Unknown sessions answer false — the shorter window.
+func (s *Service) SessionRememberMe(id string) bool {
+	if id == "" || s.sessions == nil {
+		return false
+	}
+	sess, err := s.sessions.GetByID(id)
+	if err != nil {
+		return false
+	}
+	return sess.RememberMe
+}
+
 // DeleteSession removes a single session row (logout from one device).
 func (s *Service) DeleteSession(id string) error {
 	if id == "" {
@@ -230,10 +247,10 @@ func (s *Service) DeleteSession(id string) error {
 	return s.sessions.Delete(id)
 }
 
-// ListUserSessions returns the user's active sessions, ordered most-recent
-// first. Used by the Active Devices UI in Settings → Security.
+// ListUserSessions returns the user's unexpired sessions, ordered
+// most-recent first. Used by the Active Devices UI in Settings → Security.
 func (s *Service) ListUserSessions(userID int64) ([]*Session, error) {
-	return s.sessions.ListForUser(userID)
+	return s.sessions.ListForUser(userID, time.Now().UTC())
 }
 
 // DeleteUserSessionByPublicID revokes a single session of userID, identified
@@ -243,7 +260,7 @@ func (s *Service) ListUserSessions(userID int64) ([]*Session, error) {
 // by hash because typical N is small (one user, a handful of devices) and
 // this avoids a new column / migration.
 func (s *Service) DeleteUserSessionByPublicID(userID int64, publicID string) error {
-	sessions, err := s.sessions.ListForUser(userID)
+	sessions, err := s.sessions.ListForUser(userID, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -266,6 +283,15 @@ func (s *Service) DeleteOtherUserSessions(userID int64, keepID string) error {
 // caller's current one ("log out of all devices"). The HTTP handler should
 // follow up by clearing the response cookie.
 func (s *Service) DeleteAllUserSessions(userID int64) error {
+	return s.sessions.DeleteAllForUser(userID)
+}
+
+// revokeAllSessions drops every session of userID. Tolerates the nil session
+// repository that CLI-only Services are constructed with.
+func (s *Service) revokeAllSessions(userID int64) error {
+	if s.sessions == nil {
+		return nil
+	}
 	return s.sessions.DeleteAllForUser(userID)
 }
 
@@ -295,26 +321,21 @@ func (s *Service) DoesAdminUserExist() (bool, error) {
 
 // CreateFirstUser creates the first user (admin) account and opens a session
 // for them. Returns the session id (cookie value) plus the user.
-// Errors if users already exist.
+// Returns ErrSetupAlreadyCompleted if users already exist.
 func (s *Service) CreateFirstUser(username, password string, ctx SessionContext) (string, *User, error) {
-	// Check if any users exist
-	count, err := s.repo.GetUserCount()
-	if err != nil {
+	if err := ValidateUsername(username); err != nil {
+		return "", nil, err
+	}
+	if err := ValidatePassword(password); err != nil {
 		return "", nil, err
 	}
 
-	if count > 0 {
-		return "", nil, fmt.Errorf("setup already completed: users already exist")
-	}
-
-	// Hash the password
 	passwordHash, err := HashPassword(password)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// Create user with is_admin=true
-	user, err := s.repo.Create(username, passwordHash, true)
+	user, err := s.repo.CreateFirstAdmin(username, passwordHash)
 	if err != nil {
 		return "", nil, err
 	}
@@ -329,7 +350,7 @@ func (s *Service) CreateFirstUser(username, password string, ctx SessionContext)
 }
 
 // ListUsers returns every user row, ordered by id. Caller is expected to
-// gate this on admin via auth.RequireAdmin — the service itself doesn't
+// gate this on admin via auth.RequireRealAdmin — the service itself doesn't
 // know who's asking.
 func (s *Service) ListUsers() ([]*User, error) {
 	return s.repo.ListUsers()
@@ -341,7 +362,7 @@ func (s *Service) ListUsers() ([]*User, error) {
 // same guarantees for free.
 func (s *Service) DeleteUser(actorID, targetID int64) error {
 	if actorID == targetID {
-		return fmt.Errorf("cannot delete the currently signed-in user")
+		return ErrCannotDeleteSelf
 	}
 	target, err := s.repo.GetByID(targetID)
 	if err != nil {
@@ -353,7 +374,7 @@ func (s *Service) DeleteUser(actorID, targetID int64) error {
 			return err
 		}
 		if count <= 1 {
-			return fmt.Errorf("cannot delete the last admin user")
+			return ErrCannotDeleteLastAdmin
 		}
 	}
 	return s.repo.Delete(targetID)
@@ -361,9 +382,13 @@ func (s *Service) DeleteUser(actorID, targetID int64) error {
 
 // AdminResetUserPassword replaces targetID's password without verifying the
 // existing one — distinct from Service.UpdatePassword which requires the
-// user's current password. The action is gated on admin at the handler
-// layer; here we just hash and write.
+// user's current password. The action is gated on a real admin session at the
+// handler layer. Every session of the target is revoked: a password reset
+// that leaves a stolen cookie working isn't a reset.
 func (s *Service) AdminResetUserPassword(targetID int64, newPassword string) error {
+	if err := ValidatePassword(newPassword); err != nil {
+		return err
+	}
 	if _, err := s.repo.GetByID(targetID); err != nil {
 		return err
 	}
@@ -371,202 +396,193 @@ func (s *Service) AdminResetUserPassword(targetID int64, newPassword string) err
 	if err != nil {
 		return err
 	}
-	return s.repo.UpdatePassword(targetID, hash)
+	if err := s.repo.UpdatePassword(targetID, hash); err != nil {
+		return err
+	}
+	return s.revokeAllSessions(targetID)
 }
 
 // CreateUser creates a new user account
 // In setup mode (no users exist): requires isAdmin=true, creates first admin
 // In normal mode (users exist): creates user with specified isAdmin flag
 func (s *Service) CreateUser(username, password string, isAdmin bool) (*User, error) {
-	// Check if we're in setup mode
+	if err := ValidateUsername(username); err != nil {
+		return nil, err
+	}
+	if err := ValidatePassword(password); err != nil {
+		return nil, err
+	}
+
 	count, err := s.repo.GetUserCount()
 	if err != nil {
 		return nil, err
 	}
 
 	// Setup mode: first user must be admin
-	if count == 0 {
-		if !isAdmin {
-			return nil, fmt.Errorf("first user must be an admin")
-		}
+	if count == 0 && !isAdmin {
+		return nil, ErrFirstUserMustBeAdmin
 	}
 
-	// Hash the password
 	passwordHash, err := HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create user
-	user, err := s.repo.Create(username, passwordHash, isAdmin)
-	if err != nil {
-		return nil, err
+	if count == 0 {
+		return s.repo.CreateFirstAdmin(username, passwordHash)
 	}
-
-	return user, nil
+	return s.repo.Create(username, passwordHash, isAdmin)
 }
 
-// UpdatePassword updates a user's password after verifying the current password
-func (s *Service) UpdatePassword(userID int64, currentPassword, newPassword string) error {
-	// Get the user
+// UpdatePassword replaces a user's password after verifying the current one,
+// revokes every session they had, and opens a fresh one for the caller. The
+// returned session id belongs to that new session: the tab that made the
+// change stays signed in while every other device — including one holding a
+// stolen cookie — is logged out.
+func (s *Service) UpdatePassword(userID int64, currentPassword, newPassword string, ctx SessionContext) (string, error) {
+	if err := ValidatePassword(newPassword); err != nil {
+		return "", err
+	}
+
 	user, err := s.repo.GetByID(userID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Verify current password
 	valid, err := VerifyPassword(currentPassword, user.PasswordHash)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !valid {
-		return ErrInvalidPassword
+		return "", ErrInvalidPassword
 	}
 
-	// Hash the new password
 	newPasswordHash, err := HashPassword(newPassword)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Update in repository
-	return s.repo.UpdatePassword(userID, newPasswordHash)
+	if err := s.repo.UpdatePassword(userID, newPasswordHash); err != nil {
+		return "", err
+	}
+
+	// A failed revoke is reported even though the password already changed:
+	// the caller has to know that the old sessions may still be live.
+	if err := s.revokeAllSessions(userID); err != nil {
+		return "", err
+	}
+	if s.sessions == nil {
+		return "", nil
+	}
+	return s.CreateSession(userID, ctx)
 }
 
 // RequestPasswordReset generates a reset code for the specified user
 func (s *Service) RequestPasswordReset(username string) (string, error) {
-	// Get the user
 	user, err := s.repo.GetByUsername(username)
 	if err != nil {
 		return "", err
 	}
 
-	// Generate crypto-secure 8-character Base32 code
 	code, err := generateResetCode()
 	if err != nil {
 		return "", err
 	}
 
-	// Delete any existing reset codes for this user
-	err = s.repo.DeleteResetCodesByUserID(user.ID)
-	if err != nil {
+	// Only one code per user may be live at a time.
+	if err := s.repo.DeleteResetCodesByUserID(user.ID); err != nil {
 		return "", err
 	}
 
-	// Store new code with 30-minute expiration
-	expiresAt := time.Now().Add(30 * time.Minute)
-	err = s.repo.StoreResetCode(code, user.ID, expiresAt)
-	if err != nil {
+	if err := s.repo.StoreResetCode(code, user.ID, time.Now().Add(ResetCodeTTL)); err != nil {
 		return "", err
 	}
 
 	return code, nil
 }
 
-// RequestPasswordResetWithFile generates a reset code, writes it to a file, and logs to console
-func (s *Service) RequestPasswordResetWithFile(username string) (string, string, error) {
-	// Generate the reset code using existing method
+// RequestPasswordResetWithFile generates a reset code and writes it to a file
+// the operator can read off the server. The code itself never reaches the log:
+// it is password-equivalent, the endpoint that triggers it is unauthenticated,
+// and logs are routinely readable by more people than the account is.
+func (s *Service) RequestPasswordResetWithFile(username string) error {
 	code, err := s.RequestPasswordReset(username)
 	if err != nil {
-		return "", "", err
+		return err
 	}
 
-	// Get user info
 	user, err := s.repo.GetByUsername(username)
 	if err != nil {
-		return "", "", err
+		return err
 	}
 
-	// Get data directory from central config
-	dataDir := config.GetDataDir()
-
-	// Create reset_codes subdirectory
-	resetCodesDir := filepath.Join(dataDir, "reset_codes")
-	if err := os.MkdirAll(resetCodesDir, 0755); err != nil {
-		return "", "", fmt.Errorf("failed to create reset codes directory: %w", err)
-	}
-
-	// Create filename with unix timestamp
-	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("%d_pw_reset_code_%s.json", timestamp, user.Username)
-	filePath := filepath.Join(resetCodesDir, filename)
-
-	// Create file content
-	fileContent := map[string]interface{}{
-		"code":       code,
-		"username":   user.Username,
-		"created_at": time.Now().Format(time.RFC3339),
-		"expires_at": time.Now().Add(30 * time.Minute).Format(time.RFC3339),
-	}
-
-	// Write to file
-	fileData, err := json.MarshalIndent(fileContent, "", "  ")
+	createdAt := time.Now()
+	filePath, err := s.resetCodeFiles.Write(user.Username, code, createdAt)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to marshal reset code data: %w", err)
+		return err
 	}
 
-	if err := os.WriteFile(filePath, fileData, 0600); err != nil {
-		return "", "", fmt.Errorf("failed to write reset code file: %w", err)
-	}
+	log.Printf("Password reset code generated for %q - read it from %s (expires %s)",
+		user.Username, filePath, createdAt.Add(ResetCodeTTL).Format(time.RFC3339))
 
-	// Log to console
-	log.Printf("========================================")
-	log.Printf("PASSWORD RESET CODE GENERATED")
-	log.Printf("========================================")
-	log.Printf("Username: %s", user.Username)
-	log.Printf("Code: %s", code)
-	log.Printf("File: %s", filePath)
-	log.Printf("Expires: %s (30 minutes)", time.Now().Add(30*time.Minute).Format(time.RFC3339))
-	log.Printf("========================================")
-
-	return filePath, user.Username, nil
+	return nil
 }
 
-// ConfirmPasswordReset validates a reset code and sets a new password for the user
+// ConfirmPasswordReset validates a reset code and sets a new password for the
+// user, revoking every session they had.
 func (s *Service) ConfirmPasswordReset(code string, newPassword string) (*User, error) {
-	// Get reset code from repository
+	if err := ValidatePassword(newPassword); err != nil {
+		return nil, err
+	}
+
 	resetCode, err := s.repo.GetResetCode(code)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if code is expired
 	if time.Now().After(resetCode.ExpiresAt) {
 		return nil, ErrInvalidResetCode
 	}
 
-	// Get the user associated with this reset code
 	user, err := s.repo.GetByID(resetCode.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Hash the new password
 	passwordHash, err := HashPassword(newPassword)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update user's password
-	err = s.repo.UpdatePassword(user.ID, passwordHash)
-	if err != nil {
+	if err := s.repo.UpdatePassword(user.ID, passwordHash); err != nil {
 		return nil, err
 	}
 
-	// Delete the reset code (consumed)
-	err = s.repo.DeleteResetCode(code)
-	if err != nil {
+	if err := s.revokeAllSessions(user.ID); err != nil {
 		return nil, err
 	}
 
-	// Return the reset user
+	// The password is already changed by this point, so a failed delete must
+	// not be reported as a failed reset. The code expires on its own, and the
+	// cleanup job sweeps it.
+	if err := s.repo.DeleteResetCode(code); err != nil {
+		log.Printf("Failed to consume reset code for user %d: %v", user.ID, err)
+	}
+
 	return s.repo.GetByID(user.ID)
 }
 
-// CleanupExpiredResetCodes deletes all expired reset codes from the database
-// This method is intended to be called periodically by a background job
+// CleanupExpiredResetCodes deletes expired reset codes — both the DB rows and
+// the notification files, which nothing else removes between CLI resets.
+// Intended to be called periodically by a background job.
 func (s *Service) CleanupExpiredResetCodes() error {
-	return s.repo.DeleteExpiredResetCodes()
+	if err := s.repo.DeleteExpiredResetCodes(); err != nil {
+		return err
+	}
+	if _, err := s.resetCodeFiles.DeleteExpired(time.Now()); err != nil {
+		return err
+	}
+	return nil
 }
 
 // generateResetCode creates a crypto-secure 8-character Base32 code
@@ -590,4 +606,3 @@ func generateResetCode() (string, error) {
 
 	return code, nil
 }
-

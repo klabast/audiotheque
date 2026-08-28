@@ -95,13 +95,13 @@ type countingMPDClient struct {
 	statusCalls  int
 }
 
-func (c *countingMPDClient) Play() error                      { c.playCalled = true; return nil }
-func (c *countingMPDClient) Pause() error                     { return nil }
-func (c *countingMPDClient) Stop() error                      { return nil }
-func (c *countingMPDClient) SetVolume(int) error              { return nil }
-func (c *countingMPDClient) Seek(p int) error                 { c.seekPosition = p; return nil }
-func (c *countingMPDClient) LoadURL(string) error             { c.loadCalled = true; return nil }
-func (c *countingMPDClient) Close() error                     { return nil }
+func (c *countingMPDClient) Play() error          { c.playCalled = true; return nil }
+func (c *countingMPDClient) Pause() error         { return nil }
+func (c *countingMPDClient) Stop() error          { return nil }
+func (c *countingMPDClient) SetVolume(int) error  { return nil }
+func (c *countingMPDClient) Seek(p int) error     { c.seekPosition = p; return nil }
+func (c *countingMPDClient) LoadURL(string) error { c.loadCalled = true; return nil }
+func (c *countingMPDClient) Close() error         { return nil }
 func (c *countingMPDClient) Status() (mpd.Status, error) {
 	c.statusCalls++
 	return mpd.Status{State: "play", Elapsed: c.seekPosition}, nil

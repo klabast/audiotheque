@@ -15,17 +15,20 @@ import (
 
 // mockService implements ServiceInterface for handler tests
 type mockService struct {
-	startScanError        error
-	getScanProgressError  error
-	scanProgress          *ScanProgress
-	libraries             []*Library
-	createLibraryResult   *Library
-	createLibraryError    error
-	deleteLibraryError    error
-	updateLibraryResult   *Library
-	updateLibraryError    error
-	albumCoverPath        string
-	getAlbumCoverPathErr  error
+	startScanError       error
+	getScanProgressError error
+	scanProgress         *ScanProgress
+	libraries            []*Library
+	createLibraryResult  *Library
+	createLibraryError   error
+	deleteLibraryError   error
+	updateLibraryResult  *Library
+	updateLibraryError   error
+	albumCoverPath       string
+	getAlbumCoverPathErr error
+	// accessErr, when set, is returned by every read path that enforces the
+	// library_access ACL, standing in for a caller without access.
+	accessErr error
 }
 
 func (m *mockService) ListLibraries(userID int64) ([]*Library, error) {
@@ -40,7 +43,10 @@ func (m *mockService) StartScan(libraryID int64) error {
 	return m.startScanError
 }
 
-func (m *mockService) GetScanProgress(libraryID int64) (*ScanProgress, error) {
+func (m *mockService) GetScanProgress(userID, libraryID int64) (*ScanProgress, error) {
+	if m.accessErr != nil {
+		return nil, m.accessErr
+	}
 	return m.scanProgress, m.getScanProgressError
 }
 
@@ -52,23 +58,38 @@ func (m *mockService) UpdateLibrary(libraryID int64, name string, paths []string
 	return m.updateLibraryResult, m.updateLibraryError
 }
 
-func (m *mockService) ListAlbums(libraryID int64, opts ListAlbumsOptions) ([]*AlbumWithArtist, error) {
+func (m *mockService) ListAlbums(userID, libraryID int64, opts ListAlbumsOptions) ([]*AlbumWithArtist, error) {
+	if m.accessErr != nil {
+		return nil, m.accessErr
+	}
 	return nil, nil
 }
 
-func (m *mockService) GetAlbumCoverPath(albumID int64) (string, error) {
+func (m *mockService) GetAlbumCoverPath(userID, albumID int64) (string, error) {
+	if m.accessErr != nil {
+		return "", m.accessErr
+	}
 	return m.albumCoverPath, m.getAlbumCoverPathErr
 }
 
-func (m *mockService) GetAlbum(albumID int64) (*AlbumWithArtist, error) {
+func (m *mockService) GetAlbum(userID, albumID int64) (*AlbumWithArtist, error) {
+	if m.accessErr != nil {
+		return nil, m.accessErr
+	}
 	return nil, nil
 }
 
-func (m *mockService) ListTracksByAlbum(albumID int64) ([]*TrackWithArtist, error) {
+func (m *mockService) ListTracksByAlbum(userID, albumID int64) ([]*TrackWithArtist, error) {
+	if m.accessErr != nil {
+		return nil, m.accessErr
+	}
 	return nil, nil
 }
 
-func (m *mockService) Search(libraryID int64, query string) (*SearchResult, error) {
+func (m *mockService) Search(userID, libraryID int64, query string) (*SearchResult, error) {
+	if m.accessErr != nil {
+		return nil, m.accessErr
+	}
 	return &SearchResult{}, nil
 }
 
@@ -136,6 +157,10 @@ func (m *mockAuthRepository) Delete(userID int64) error {
 
 func (m *mockAuthRepository) Create(username, passwordHash string, isAdmin bool) (*auth.User, error) {
 	return nil, nil
+}
+
+func (m *mockAuthRepository) CreateFirstAdmin(username, passwordHash string) (*auth.User, error) {
+	return nil, auth.ErrSetupAlreadyCompleted
 }
 
 func (m *mockAuthRepository) UpdatePassword(userID int64, passwordHash string) error {
@@ -227,7 +252,7 @@ func TestHandleScanLibrary_Success(t *testing.T) {
 
 	// Use ServeMux to get proper path value support
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/libraries/{id}/scan", handler.HandleScanLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/libraries/1/scan", nil)
 	if err := addAuthCookie(req, 1); err != nil {
@@ -265,7 +290,7 @@ func TestHandleScanLibrary_AlreadyInProgress(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/libraries/{id}/scan", handler.HandleScanLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/libraries/1/scan", nil)
 	if err := addAuthCookie(req, 1); err != nil {
@@ -303,7 +328,7 @@ func TestHandleScanLibrary_LibraryNotFound(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/libraries/{id}/scan", handler.HandleScanLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/libraries/999/scan", nil)
 	if err := addAuthCookie(req, 1); err != nil {
@@ -323,14 +348,18 @@ func TestHandleScanLibrary_LibraryNotFound(t *testing.T) {
 // TestHandleScanLibrary_MethodNotAllowed tests that non-POST requests are rejected
 func TestHandleScanLibrary_MethodNotAllowed(t *testing.T) {
 	// Arrange
-	mockSvc := &mockService{}
-	handler := &Handler{service: mockSvc}
+	handler := &Handler{
+		service:     &mockService{},
+		authService: createTestAuthService(),
+	}
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/libraries/1/scan", nil)
 	w := httptest.NewRecorder()
 
 	// Act
-	handler.HandleScanLibrary(w, req)
+	mux.ServeHTTP(w, req)
 
 	// Assert
 	if w.Code != http.StatusMethodNotAllowed {
@@ -355,12 +384,18 @@ func TestHandleGetScanStatus_Success(t *testing.T) {
 		scanProgress:         progress,
 		getScanProgressError: nil,
 	}
-	handler := &Handler{service: mockSvc}
+	handler := &Handler{
+		service:     mockSvc,
+		authService: createTestAuthService(),
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/libraries/{id}/scan-status", handler.HandleGetScanStatus)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/libraries/1/scan-status", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act
@@ -396,12 +431,18 @@ func TestHandleGetScanStatus_NoScanInProgress(t *testing.T) {
 		scanProgress:         nil,
 		getScanProgressError: ErrNoScanInProgress,
 	}
-	handler := &Handler{service: mockSvc}
+	handler := &Handler{
+		service:     mockSvc,
+		authService: createTestAuthService(),
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/libraries/{id}/scan-status", handler.HandleGetScanStatus)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/libraries/1/scan-status", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act
@@ -424,12 +465,18 @@ func TestHandleGetScanStatus_InternalError(t *testing.T) {
 		scanProgress:         nil,
 		getScanProgressError: ErrLibraryNotFound,
 	}
-	handler := &Handler{service: mockSvc}
+	handler := &Handler{
+		service:     mockSvc,
+		authService: createTestAuthService(),
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/libraries/{id}/scan-status", handler.HandleGetScanStatus)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/libraries/999/scan-status", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act
@@ -444,14 +491,18 @@ func TestHandleGetScanStatus_InternalError(t *testing.T) {
 // TestHandleGetScanStatus_MethodNotAllowed tests that non-GET requests are rejected
 func TestHandleGetScanStatus_MethodNotAllowed(t *testing.T) {
 	// Arrange
-	mockSvc := &mockService{}
-	handler := &Handler{service: mockSvc}
+	handler := &Handler{
+		service:     &mockService{},
+		authService: createTestAuthService(),
+	}
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/libraries/1/scan-status", nil)
 	w := httptest.NewRecorder()
 
 	// Act
-	handler.HandleGetScanStatus(w, req)
+	mux.ServeHTTP(w, req)
 
 	// Assert
 	if w.Code != http.StatusMethodNotAllowed {
@@ -475,7 +526,7 @@ func TestHandleDeleteLibrary_Success(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("DELETE /api/libraries/{id}", handler.HandleDeleteLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/libraries/1", nil)
 	if err := addAuthCookie(req, 1); err != nil {
@@ -504,7 +555,7 @@ func TestHandleDeleteLibrary_NotFound(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("DELETE /api/libraries/{id}", handler.HandleDeleteLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/libraries/999", nil)
 	if err := addAuthCookie(req, 1); err != nil {
@@ -544,7 +595,7 @@ func TestHandleDeleteLibrary_Forbidden(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("DELETE /api/libraries/{id}", handler.HandleDeleteLibrary)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/libraries/1", nil)
 	if err := addAuthCookie(req, 2); err != nil {
@@ -582,13 +633,17 @@ func TestHandleGetAlbumCover_Success(t *testing.T) {
 		albumCoverPath: coverPath,
 	}
 	handler := &Handler{
-		service: mockSvc,
+		service:     mockSvc,
+		authService: createTestAuthService(),
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/albums/{id}/cover", handler.HandleGetAlbumCover)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/albums/1/cover", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act
@@ -615,13 +670,17 @@ func TestHandleGetAlbumCover_NotFound(t *testing.T) {
 		getAlbumCoverPathErr: ErrAlbumNotFound,
 	}
 	handler := &Handler{
-		service: mockSvc,
+		service:     mockSvc,
+		authService: createTestAuthService(),
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/albums/{id}/cover", handler.HandleGetAlbumCover)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/albums/999/cover", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act
@@ -640,13 +699,17 @@ func TestHandleGetAlbumCover_NoCover(t *testing.T) {
 		albumCoverPath: "", // Empty path means no cover
 	}
 	handler := &Handler{
-		service: mockSvc,
+		service:     mockSvc,
+		authService: createTestAuthService(),
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/albums/{id}/cover", handler.HandleGetAlbumCover)
+	handler.RegisterRoutes(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/albums/1/cover", nil)
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("failed to add auth cookie: %v", err)
+	}
 	w := httptest.NewRecorder()
 
 	// Act

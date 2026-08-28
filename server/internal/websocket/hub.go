@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -41,6 +42,15 @@ func init() {
 func getPingInterval() time.Duration { return time.Duration(pingInterval.Load()) }
 func getPongWait() time.Duration     { return time.Duration(pongWait.Load()) }
 func getWriteWait() time.Duration    { return time.Duration(writeWait.Load()) }
+
+// ErrClientBufferFull reports that a targeted message could not be queued
+// because the client's send buffer was full.
+var ErrClientBufferFull = errors.New("client send buffer full")
+
+// maxMessageSize caps an inbound frame. gorilla's default is unlimited, so
+// without it any peer can make the server allocate a buffer of whatever size
+// it claims to be sending.
+const maxMessageSize = 64 * 1024
 
 // Message represents a WebSocket message to be broadcast
 type Message struct {
@@ -85,6 +95,11 @@ type Hub struct {
 
 	// Mutex for thread-safe operations
 	mu sync.RWMutex
+
+	// handlerMu guards the callbacks below. They are set during wiring while
+	// the Run goroutine is already reading them, so the accessors below are
+	// the only correct way to touch them.
+	handlerMu sync.RWMutex
 
 	// Handler for incoming client messages
 	onMessage IncomingMessageHandler
@@ -138,14 +153,15 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			h.mu.Unlock()
 			log.Printf("WebSocket client connected (total: %d)", len(h.clients))
+			onReg, onUnreg := h.lifecycleHandlers()
 			if stale != nil {
 				stale.conn.Close()
-				if h.onUnregister != nil {
-					h.onUnregister(stale)
+				if onUnreg != nil {
+					onUnreg(stale)
 				}
 			}
-			if h.onRegister != nil {
-				h.onRegister(client)
+			if onReg != nil {
+				onReg(client)
 			}
 
 		case client := <-h.unregister:
@@ -158,34 +174,28 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 			log.Printf("WebSocket client disconnected (total: %d)", len(h.clients))
-			if deleted && h.onUnregister != nil {
-				h.onUnregister(client)
+			if _, onUnreg := h.lifecycleHandlers(); deleted && onUnreg != nil {
+				onUnreg(client)
 			}
 
 		case message := <-h.broadcast:
-			// Collect stuck clients under RLock, then upgrade to Lock to
-			// delete and close. Mutating the map under RLock raced with
-			// concurrent BroadcastToUser readers; closing client.send while
-			// another reader was mid-send caused panics.
-			var stuck []*Client
+			// A full buffer means this client is reading slower than we are
+			// broadcasting, not that it is gone: drop the message for that
+			// client and let the keepalive deadline decide whether it is dead.
+			// A backgrounded tab whose write pump the browser throttles is the
+			// common case.
+			var dropped int
 			h.mu.RLock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					stuck = append(stuck, client)
+					dropped++
 				}
 			}
 			h.mu.RUnlock()
-			if len(stuck) > 0 {
-				h.mu.Lock()
-				for _, client := range stuck {
-					if _, ok := h.clients[client]; ok {
-						delete(h.clients, client)
-						close(client.send)
-					}
-				}
-				h.mu.Unlock()
+			if dropped > 0 {
+				log.Printf("WebSocket broadcast dropped for %d slow client(s)", dropped)
 			}
 		}
 	}
@@ -238,13 +248,29 @@ func (h *Hub) BroadcastToUserExcept(userID int64, exceptClientID string, msg Mes
 
 // SetMessageHandler sets the handler for incoming client messages
 func (h *Hub) SetMessageHandler(handler IncomingMessageHandler) {
+	h.handlerMu.Lock()
+	defer h.handlerMu.Unlock()
 	h.onMessage = handler
+}
+
+func (h *Hub) messageHandler() IncomingMessageHandler {
+	h.handlerMu.RLock()
+	defer h.handlerMu.RUnlock()
+	return h.onMessage
+}
+
+func (h *Hub) lifecycleHandlers() (LifecycleHandler, LifecycleHandler) {
+	h.handlerMu.RLock()
+	defer h.handlerMu.RUnlock()
+	return h.onRegister, h.onUnregister
 }
 
 // SetLifecycleHandlers sets the on-register / on-unregister callbacks. Either
 // may be nil. The callbacks fire from the hub's goroutine, so they must not
 // block — push work to a goroutine if it might.
 func (h *Hub) SetLifecycleHandlers(onReg, onUnreg LifecycleHandler) {
+	h.handlerMu.Lock()
+	defer h.handlerMu.Unlock()
 	h.onRegister = onReg
 	h.onUnregister = onUnreg
 }
@@ -269,9 +295,13 @@ func (h *Hub) SendToClient(clientID string, msg Message) error {
 		}
 		select {
 		case client.send <- data:
+			return nil
 		default:
+			// Targeted messages carry state the peer cannot reconstruct — a
+			// playback handoff, the client-id welcome. Silently discarding one
+			// leaves the two sides disagreeing, so the caller has to know.
+			return fmt.Errorf("client %s: %w", clientID, ErrClientBufferFull)
 		}
-		return nil
 	}
 	return nil
 }
@@ -298,6 +328,7 @@ func (c *Client) readPump() {
 		c.conn.Close()
 	}()
 
+	c.conn.SetReadLimit(maxMessageSize)
 	if err := c.conn.SetReadDeadline(time.Now().Add(getPongWait())); err != nil {
 		log.Printf("WebSocket set read deadline: %v", err)
 		return
@@ -317,12 +348,28 @@ func (c *Client) readPump() {
 
 		// Parse and route incoming messages
 		var msg Message
-		if err := json.Unmarshal(message, &msg); err == nil && c.hub.onMessage != nil {
-			c.hub.onMessage(c.UserID, c.ID, msg)
-		} else if err != nil {
+		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("Failed to parse WebSocket message: %v", err)
+			continue
 		}
+		c.dispatch(msg)
 	}
+}
+
+// dispatch hands one parsed message to the hub's handler, containing panics to
+// the offending connection. The handler runs on this client's read pump, so an
+// unrecovered panic there would take the whole server down.
+func (c *Client) dispatch(msg Message) {
+	handler := c.hub.messageHandler()
+	if handler == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic handling %q from client %s: %v", msg.Type, c.ID, r)
+		}
+	}()
+	handler(c.UserID, c.ID, msg)
 }
 
 // writePump pumps messages from the hub to the WebSocket connection.

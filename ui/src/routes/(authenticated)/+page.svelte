@@ -16,26 +16,24 @@
 	import { playback } from '$lib/stores/playback.svelte';
 	import { getMainScrollContainer } from '$lib/utils/scroll-restoration';
 	import { matchesQuery } from '$lib/utils/text-match';
+	import {
+		SORT_FIELDS,
+		DEFAULT_SORT,
+		type SortField,
+		type SortDir,
+		type SortLevel
+	} from '$lib/utils/validation';
 	import { Zap, ArrowUp, ArrowDown, Play } from 'lucide-svelte';
 	import { createVirtualizer } from '@tanstack/svelte-virtual';
 
-	type SortField = 'album-artist' | 'artist' | 'album-title' | 'year';
-	type SortDir = 'asc' | 'desc';
-	type SortLevel = { field: SortField; dir: SortDir };
 	type SearchScope = 'albums' | 'artists' | 'tracks';
 
-	const SORT_FIELDS: SortField[] = ['album-artist', 'artist', 'album-title', 'year'];
 	const SORT_LABEL: Record<SortField, () => string> = {
 		'album-artist': m['library.sort.album_artist'],
 		artist: m['library.sort.artist'],
 		'album-title': m['library.sort.album_title'],
 		year: m['library.sort.year']
 	};
-	const DEFAULT_SORT: [SortLevel, SortLevel] = [
-		{ field: 'album-artist', dir: 'asc' },
-		{ field: 'year', dir: 'asc' }
-	];
-
 	const SEARCH_SCOPES: SearchScope[] = ['albums', 'artists', 'tracks'];
 	const SCOPE_LABEL: Record<SearchScope, () => string> = {
 		albums: m['library.search.section_albums'],

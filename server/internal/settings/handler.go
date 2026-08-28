@@ -42,6 +42,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/settings/auth", h.HandleSetAuth)
 }
 
+// requireRealAdmin demands a genuinely signed-in admin, ignoring the
+// auth-disabled toggle. Flipping login off must not hand every caller on the
+// network the ability to flip it back on — or to lock the owner out by doing
+// so. `audiod system auth on` is the recovery path when no session exists.
+func (h *Handler) requireRealAdmin(w http.ResponseWriter, r *http.Request) (*auth.User, error) {
+	return auth.RequireRealAdmin(w, r, h.authService)
+}
+
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.User, error) {
 	user, err := auth.AuthenticateRequest(w, r, h.authService)
 	if err != nil {
@@ -326,7 +334,7 @@ func (h *Handler) HandleGetAuth(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {string} string "forbidden"
 // @Router /settings/auth [put]
 func (h *Handler) HandleSetAuth(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.requireAdmin(w, r); err != nil {
+	if _, err := h.requireRealAdmin(w, r); err != nil {
 		if err == auth.ErrForbidden {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else {

@@ -77,16 +77,28 @@ func (m *mockPlaybackDevice) SupportsVolume() bool {
 	return m.setVolumeErr == nil || !errors.Is(m.setVolumeErr, ErrVolumeNotSupported)
 }
 
-// mockDeviceResolver maps device IDs to mock devices for testing
+// mockDeviceResolver maps device IDs to mock devices for testing. errs lets a
+// test make a known device fail to resolve (e.g. ErrDeviceUnreachable for an
+// MPD box that is rebooting); browsers marks IDs the resolver considers
+// browser tabs, mirroring RegistryDeviceResolver.IsBrowserDevice.
 type mockDeviceResolver struct {
-	devices map[string]PlaybackDevice
+	devices  map[string]PlaybackDevice
+	errs     map[string]error
+	browsers map[string]bool
 }
 
 func (m *mockDeviceResolver) ResolveDevice(deviceID string) (PlaybackDevice, error) {
+	if err, ok := m.errs[deviceID]; ok {
+		return nil, err
+	}
 	if d, ok := m.devices[deviceID]; ok {
 		return d, nil
 	}
 	return nil, ErrDeviceNotFound
+}
+
+func (m *mockDeviceResolver) IsBrowserDevice(deviceID string) bool {
+	return m.browsers[deviceID]
 }
 
 // TDD: Playing an album with a device ID sends play command to that device
@@ -330,7 +342,7 @@ func TestService_TransferPlayback_SavesAndRestoresVolume(t *testing.T) {
 	mpdDevice := &mockPlaybackDevice{state: "play", volume: 40, seekPosition: 10}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": &BrowserPlaybackDevice{},
 		},
 	}
@@ -367,7 +379,7 @@ func TestService_TransferPlayback_RoundTrip_PerDeviceVolume(t *testing.T) {
 	browserDevice := &mockPlaybackDevice{volume: 80}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": browserDevice,
 		},
 	}
@@ -430,7 +442,7 @@ func TestService_TransferPlayback_MultiHop_PreservesPosition(t *testing.T) {
 	mpdDevice := &mockPlaybackDevice{state: "stop", volume: 100}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": &BrowserPlaybackDevice{},
 		},
 	}
@@ -545,12 +557,12 @@ func TestService_Pause_DeviceFailureReturnsError(t *testing.T) {
 type failingMockDevice struct{ err error }
 
 func (f *failingMockDevice) Play(string, int) error { return f.err }
-func (f *failingMockDevice) Pause() error            { return f.err }
-func (f *failingMockDevice) Resume() error           { return f.err }
-func (f *failingMockDevice) Stop() error             { return f.err }
-func (f *failingMockDevice) Seek(int) error          { return f.err }
-func (f *failingMockDevice) SetVolume(int) error     { return f.err }
-func (f *failingMockDevice) SupportsVolume() bool    { return true }
+func (f *failingMockDevice) Pause() error           { return f.err }
+func (f *failingMockDevice) Resume() error          { return f.err }
+func (f *failingMockDevice) Stop() error            { return f.err }
+func (f *failingMockDevice) Seek(int) error         { return f.err }
+func (f *failingMockDevice) SetVolume(int) error    { return f.err }
+func (f *failingMockDevice) SupportsVolume() bool   { return true }
 func (f *failingMockDevice) Status() (DeviceStatus, error) {
 	return DeviceStatus{State: "play"}, nil
 }
@@ -798,7 +810,7 @@ func TestService_TransferPlayback_RestoreVolumeNotSupportedDoesNotError(t *testi
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
 			"c-browser-1": browserDevice,
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 		},
 	}
 	existingSession := &Session{

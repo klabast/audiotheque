@@ -1,7 +1,6 @@
 import { Then } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 import { AudiodWorld } from '../../support/world';
-import { getServerLogs, parseResetCode } from '../../support/server';
 import { listServerDataDir, readServerDataFile } from '../../support/audiod-cli';
 
 Then('User should be redirected to the password change page', async function (this: AudiodWorld) {
@@ -57,18 +56,6 @@ Then('User should see the library page', async function (this: AudiodWorld) {
 	await page.waitForURL((url) => !url.pathname.includes('/login') && !url.pathname.includes('/change-password'));
 	expect(page.url()).not.toContain('/login');
 	expect(page.url()).not.toContain('/change-password');
-});
-
-Then('Server generates a reset code', async function (this: AudiodWorld) {
-	// This happens on the server side - we'll verify it in the next step
-});
-
-Then('Reset code is logged to server console', async function (this: AudiodWorld) {
-	const logs = await getServerLogs();
-	this.resetCode = parseResetCode(logs);
-
-	expect(this.resetCode).toBeDefined();
-	expect(this.resetCode).toMatch(/^[A-Z0-9]+$/);
 });
 
 // The session cookie's Max-Age is set from the server's window (30d default,

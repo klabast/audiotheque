@@ -3,6 +3,7 @@ package auth
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -211,11 +212,48 @@ VALUES (?, ?, ?)`
 
 	_, err := r.db.Exec(query, username, passwordHash, isAdmin)
 	if err != nil {
+		if isUniqueUsernameViolation(err) {
+			return nil, ErrUsernameTaken
+		}
 		return nil, err
 	}
 
 	// Fetch the created user
 	return r.GetByUsername(username)
+}
+
+// CreateFirstAdmin inserts the initial admin only while the user table is
+// still empty. The emptiness test and the insert are one statement, so two
+// concurrent /api/auth/setup requests cannot both come out the other side
+// with an admin account.
+func (r *repository) CreateFirstAdmin(username, passwordHash string) (*User, error) {
+	//language=SQL
+	query := `
+INSERT INTO user (username, password_hash, is_admin)
+SELECT ?, ?, 1
+WHERE NOT EXISTS (SELECT 1 FROM user)`
+
+	result, err := r.db.Exec(query, username, passwordHash)
+	if err != nil {
+		if isUniqueUsernameViolation(err) {
+			return nil, ErrSetupAlreadyCompleted
+		}
+		return nil, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, ErrSetupAlreadyCompleted
+	}
+	return r.GetByUsername(username)
+}
+
+// isUniqueUsernameViolation maps the driver's constraint text onto a domain
+// error so callers never have to match on it (and never leak it to a client).
+func isUniqueUsernameViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: user.username")
 }
 
 // UpdatePassword updates a user's password

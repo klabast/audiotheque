@@ -64,26 +64,36 @@ func (s *Service) CreateLibrary(userID int64, name string, paths []string) (*Lib
 	return library, nil
 }
 
-// ScanLibrary scans a library's paths for audio files and indexes them
-func (s *Service) ScanLibrary(libraryID int64) (*ScanStats, error) {
-	// Get the library
-	library, err := s.repo.GetLibraryByID(libraryID)
+// requireLibraryAccess reports whether userID may read libraryID, returning
+// ErrLibraryAccessDenied when they may not. Every read path goes through this
+// or albumIfAccessible — the library_access ACL is otherwise unenforced on
+// anything but the library list itself.
+func (s *Service) requireLibraryAccess(userID, libraryID int64) error {
+	allowed, err := s.repo.UserHasLibraryAccess(userID, libraryID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrLibraryAccessDenied
+	}
+	return nil
+}
+
+// albumIfAccessible resolves an album and checks the caller against the
+// library that owns it. Album and track routes are addressed by album id, so
+// the owning library has to be resolved before the ACL can be applied.
+func (s *Service) albumIfAccessible(userID, albumID int64) (*Album, error) {
+	album, err := s.repo.GetAlbumByID(albumID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Initialize stats
-	stats := &ScanStats{
-		FilesScanned: 0,
-		TracksAdded:  0,
-		Errors:       0,
+	if album == nil {
+		return nil, ErrAlbumNotFound
 	}
-
-	// For now, just return empty stats
-	// TODO: Walk filesystem paths and scan audio files
-	_ = library // Use library to avoid unused variable error
-
-	return stats, nil
+	if err := s.requireLibraryAccess(userID, album.LibraryID); err != nil {
+		return nil, err
+	}
+	return album, nil
 }
 
 // StartScan queues a scan for a library
@@ -105,7 +115,10 @@ func (s *Service) StartScan(libraryID int64) error {
 
 // GetScanProgress returns the current scan progress for a library
 // Returns ErrNoScanInProgress if no scan is running
-func (s *Service) GetScanProgress(libraryID int64) (*ScanProgress, error) {
+func (s *Service) GetScanProgress(userID, libraryID int64) (*ScanProgress, error) {
+	if err := s.requireLibraryAccess(userID, libraryID); err != nil {
+		return nil, err
+	}
 	job, err := s.repo.GetScanJobByLibrary(libraryID)
 	if err != nil {
 		return nil, err
@@ -193,7 +206,10 @@ var DefaultAlbumSort = []SortSpec{
 }
 
 // ListAlbums returns all albums in a library with artist information
-func (s *Service) ListAlbums(libraryID int64, opts ListAlbumsOptions) ([]*AlbumWithArtist, error) {
+func (s *Service) ListAlbums(userID, libraryID int64, opts ListAlbumsOptions) ([]*AlbumWithArtist, error) {
+	if err := s.requireLibraryAccess(userID, libraryID); err != nil {
+		return nil, err
+	}
 	if len(opts.SortBy) == 0 {
 		opts.SortBy = DefaultAlbumSort
 	}
@@ -231,7 +247,10 @@ const SearchResultLimit = 25
 // case-insensitive, prefix/type-ahead) over title/name plus artist, genre and
 // year, so a query finds an album by its artist as well as its title. An empty
 // query returns an empty result.
-func (s *Service) Search(libraryID int64, query string) (*SearchResult, error) {
+func (s *Service) Search(userID, libraryID int64, query string) (*SearchResult, error) {
+	if err := s.requireLibraryAccess(userID, libraryID); err != nil {
+		return nil, err
+	}
 	result := &SearchResult{}
 	if query == "" {
 		return result, nil
@@ -276,8 +295,8 @@ func (s *Service) artistName(artistID *int64) string {
 }
 
 // GetAlbumCoverPath returns the full file path to an album's cover art
-func (s *Service) GetAlbumCoverPath(albumID int64) (string, error) {
-	album, err := s.repo.GetAlbumByID(albumID)
+func (s *Service) GetAlbumCoverPath(userID, albumID int64) (string, error) {
+	album, err := s.albumIfAccessible(userID, albumID)
 	if err != nil {
 		return "", err
 	}
@@ -289,8 +308,8 @@ func (s *Service) GetAlbumCoverPath(albumID int64) (string, error) {
 }
 
 // GetAlbum returns an album by ID with artist information
-func (s *Service) GetAlbum(albumID int64) (*AlbumWithArtist, error) {
-	album, err := s.repo.GetAlbumByID(albumID)
+func (s *Service) GetAlbum(userID, albumID int64) (*AlbumWithArtist, error) {
+	album, err := s.albumIfAccessible(userID, albumID)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +337,10 @@ type TrackWithArtist struct {
 }
 
 // ListTracksByAlbum returns all tracks in an album with artist information
-func (s *Service) ListTracksByAlbum(albumID int64) ([]*TrackWithArtist, error) {
+func (s *Service) ListTracksByAlbum(userID, albumID int64) ([]*TrackWithArtist, error) {
+	if _, err := s.albumIfAccessible(userID, albumID); err != nil {
+		return nil, err
+	}
 	tracks, err := s.repo.ListTracksByAlbum(albumID)
 	if err != nil {
 		return nil, err

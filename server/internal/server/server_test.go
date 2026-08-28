@@ -1,8 +1,8 @@
 package server
 
 import (
-	"errors"
 	"audiod/internal/websocket"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"

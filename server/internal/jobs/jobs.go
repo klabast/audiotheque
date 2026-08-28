@@ -75,22 +75,31 @@ func (s *Scheduler) runJob(job Job) {
 	defer ticker.Stop()
 
 	// Run immediately on start
-	if err := job.Run(s.ctx); err != nil {
-		log.Printf("[Jobs] %s failed: %v", job.Name(), err)
-	} else {
-		log.Printf("[Jobs] %s completed successfully", job.Name())
-	}
+	s.runOnce(job)
 
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := job.Run(s.ctx); err != nil {
-				log.Printf("[Jobs] %s failed: %v", job.Name(), err)
-			} else {
-				log.Printf("[Jobs] %s completed successfully", job.Name())
-			}
+			s.runOnce(job)
 		}
 	}
+}
+
+// runOnce invokes a job, containing panics to that job. Each job runs on its
+// own goroutine, so without this a panic in any scheduled job takes the whole
+// server down instead of skipping one tick.
+func (s *Scheduler) runOnce(job Job) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Jobs] %s panicked: %v", job.Name(), r)
+		}
+	}()
+
+	if err := job.Run(s.ctx); err != nil {
+		log.Printf("[Jobs] %s failed: %v", job.Name(), err)
+		return
+	}
+	log.Printf("[Jobs] %s completed successfully", job.Name())
 }

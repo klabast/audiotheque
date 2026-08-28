@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { Alert, Button, Input, Label } from '$lib/components/ui';
 	import type { LibraryLibraryResponse } from '$lib/api/generated/src';
 	import LibraryPathsEditor from './LibraryPathsEditor.svelte';
@@ -32,12 +33,12 @@
 		const filteredPaths = editLibraryPaths.filter((p) => p.trim() !== '');
 
 		if (!trimmedName) {
-			editFormError = 'Library name is required';
+			editFormError = m['errors.library_name_required']();
 			return;
 		}
 
 		if (filteredPaths.length === 0) {
-			editFormError = 'At least one path is required';
+			editFormError = m['errors.library_paths_required']();
 			return;
 		}
 
