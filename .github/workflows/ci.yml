@@ -1,16 +1,43 @@
 name: CD Pipeline
 
-# Dave Farley-style pipeline:
-#   commit-*    fast feedback (<5min)
-#   image       build candidate Docker image, tag with git sha
-#   acceptance  spin up stack, run E2E
-#   promote     retag candidate as :latest if acceptance passed (main only)
+# Dave Farley-style deployment pipeline, trunk-based.
+#
+#   commit-*    fast feedback (<5min) — runs everywhere
+#   image       build the release candidate once, tag with git sha
+#   acceptance  spin up the real stack, run E2E against the candidate
+#   promote     retag the candidate as :latest (main only)
+#
+# Where each stage runs:
+#
+#   pull_request  commit stage only. Fast signal while iterating; the
+#                 candidate is not built because the PR head is not what
+#                 gets merged.
+#   merge_group   full pipeline. The merge queue tests the *prospective
+#                 combination* of trunk + this PR, so two independently
+#                 green PRs can no longer break trunk together. This is
+#                 the gate: nothing reaches main without passing it.
+#   push (main)   full pipeline plus promote. Squash-merging produces a
+#                 new sha, so the artifact that gets released is rebuilt
+#                 and re-verified rather than assumed from the queue.
+#
+# The image is built ONCE per sha and promoted by retag, never rebuilt —
+# what carries :latest is bit-identical to what passed acceptance.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
+    branches: [main]
+
+# Trunk pipelines must not overlap: promote retags a shared :latest, so
+# two runs finishing out of order would leave :latest on the older commit
+# with every job green. Superseded PR runs are cancelled; trunk and queue
+# runs always finish, because each commit needs its own verdict.
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -27,6 +54,7 @@ jobs:
   commit-server:
     name: Commit / Server
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -45,6 +73,7 @@ jobs:
   commit-ui:
     name: Commit / UI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -81,13 +110,11 @@ jobs:
   image:
     name: Build candidate image
     needs: [commit-server, commit-ui]
-    # Only run on main pushes. Acceptance/E2E (which is the only consumer
-    # of the candidate image) is also main-only — for PR builds we trust
-    # the commit-stage (unit tests + lint + build) and accept that a
-    # broken main needs a fast revert ("stop the line"). This trades CI
-    # cost for a slightly less-clean main.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Not on pull_request: the PR head is not what lands, so a candidate
+    # built from it would be a candidate for something that never ships.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       sha-tag: ${{ steps.meta.outputs.sha-tag }}
     steps:
@@ -132,7 +159,9 @@ jobs:
   acceptance:
     name: Acceptance / E2E
     needs: [image]
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -193,8 +222,10 @@ jobs:
   promote:
     name: Promote candidate → latest
     needs: [image, acceptance]
+    # Only a commit that is actually on trunk may carry :latest.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
