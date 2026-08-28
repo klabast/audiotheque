@@ -40,18 +40,28 @@ it.
 
 ## Decision
 
-Run the full pipeline on `merge_group` and make the merge queue the only
-route to trunk.
+Prove every change against the real stack before it can merge, and
+serialise trunk.
 
-- `pull_request` runs the commit stage only. The PR head is not what
-  lands, so a candidate built from it is a candidate for something that
-  never ships. Fast signal while iterating.
-- `merge_group` runs the whole pipeline — image and acceptance included —
-  against the prospective combination of trunk plus the queued change.
-  This is the gate.
+- `pull_request` runs the whole pipeline except promote. Nothing merges
+  without having passed acceptance, so trunk cannot go red from a change
+  that fails E2E.
+- `merge_group` runs the whole pipeline too. GitHub offers merge queues
+  for org-owned repositories, and for private repositories on Team and
+  above; this repository is owned by a user account, so the trigger never
+  fires today. It is wired up anyway so that enabling a queue later — or
+  moving the repository to an organisation — is a settings change rather
+  than a workflow change.
 - `push` to `main` runs the whole pipeline and promotes. Squash-merging
   produces a new sha, so the artifact that is actually released is rebuilt
-  and re-verified rather than assumed from the queue.
+  and re-verified rather than assumed from the pull request run.
+
+Testing the *combination* of trunk and the change is the one thing a
+merge queue would add. Without one, branch protection requires the pull
+request branch to be up to date with `main` before it may merge, which
+forces the same question to be answered — by updating the branch instead
+of by a queue building a speculative merge. It is the same guarantee paid
+for with a rebase.
 
 Trunk pipelines are serialised with a `concurrency` group. Superseded pull
 request runs are cancelled; trunk and queue runs always finish, because
@@ -59,20 +69,24 @@ every commit needs its own verdict.
 
 ## Consequences
 
-Merging several pull requests at once becomes safe by construction rather
-than by hand-sequencing them and locally trial-merging each onto trunk.
+Merging several pull requests at once stops needing hand-sequencing and a
+local trial-merge of each onto trunk. Whoever merges second has to update
+their branch first, and that update is what gets tested.
 
-Acceptance runs twice per change — once in the queue, once on trunk. That
-is deliberate: with squash merges the queue sha and the trunk sha differ,
-and releasing an artifact built from a sha that was never tested would
-give up the single-artifact property this pipeline exists to protect.
+Acceptance runs twice per change — once on the pull request, once on
+trunk. That is deliberate: with squash merges the two shas differ, and
+releasing an artifact built from a sha that was never tested would give up
+the single-artifact property this pipeline exists to protect.
 
-Merging is slower per change: a queued PR waits for image plus a
-three-device acceptance matrix. In exchange trunk stays green, which is
-the trade trunk-based development is built on.
+Every push to a pull request now costs an image build plus a three-device
+acceptance matrix, roughly ten minutes. Superseded pull request runs are
+cancelled to bound the waste; trunk runs never are. This is the trade
+trunk-based development is built on: slower to merge, trunk always
+releasable.
 
-Required checks are the commit stage plus the three acceptance jobs. The
-repository admin role can bypass, so a stuck queue can never lock the
-owner out of their own repository. Path-filtered workflows
-(`test-mpd-image`) are deliberately not required, since a required check
-that does not run on every merge group deadlocks the queue.
+Required checks are the commit stage plus the three acceptance jobs, with
+the branch required to be up to date. The repository admin role keeps a
+bypass, so a stuck check can never lock the owner out of their own
+repository. Path-filtered workflows (`test-mpd-image`) are deliberately
+not required — a required check that does not run on every change blocks
+merging entirely.
