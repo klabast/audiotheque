@@ -438,12 +438,14 @@ func (s *Service) stopDevice(deviceID string) {
 }
 
 // persistFailedAdvance saves the track change the device refused, marked
-// paused, and returns the wrapped error. Returning without persisting is what
-// wedged playback: the poller pre-clears observedPlay before calling Next, so
-// a session left at the old track with state=playing never advanced again —
-// every later tick read "stop without prior play" and skipped. Persisting a
-// paused session at the new track drops the poller entry (trackMPDState) and
-// leaves the user one press of play away from recovering.
+// paused, and returns the wrapped error.
+//
+// The persist is load-bearing, not bookkeeping. The poller pre-clears
+// observedPlay before calling Next, so a session left at the old track with
+// state=playing is never advanced again — every later tick reads "stop without
+// prior play" and skips. Persisting a paused session at the new track drops
+// the poller entry (trackMPDState) and leaves the user one press of play away
+// from recovering.
 func (s *Service) persistFailedAdvance(session *Session, op string, cause error) error {
 	s.logger.Warn("device refused the track change; parking the session as paused",
 		"userID", session.UserID, "deviceID", session.DeviceID, "op", op, "error", cause)

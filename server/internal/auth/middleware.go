@@ -150,9 +150,9 @@ type AuthedHandlerFunc func(w http.ResponseWriter, r *http.Request, user *User)
 // RequireUser adapts an AuthedHandlerFunc into an http.HandlerFunc, rejecting
 // the request before next runs if no valid session is present.
 //
-// Route registration is the only place authentication is decided. Handlers
-// that authenticate themselves make protection a thing you have to remember,
-// and six library read routes shipped without it.
+// Route registration is the only place authentication is decided, so a route
+// is protected by how it is registered rather than by what its handler
+// remembers to do.
 func RequireUser(service *Service, next AuthedHandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, err := AuthenticateRequest(w, r, service)

@@ -227,7 +227,6 @@ type Repository interface {
 	ListTracksByAlbum(albumID int64) ([]*Track, error)
 	ListTracksByLibrary(libraryID int64) ([]*Track, error)
 	GetTrackPathsForLibrary(libraryID int64) (map[string]time.Time, error) // path -> modTime
-	// DeleteTracksByPaths removes tracks whose files are gone from disk.
 	DeleteTracksByPaths(libraryID int64, paths []string) (int64, error)
 
 	// Access control

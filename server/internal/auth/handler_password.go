@@ -142,10 +142,9 @@ func (h *Handler) HandleRequestPasswordReset(w http.ResponseWriter, r *http.Requ
 	}
 	h.limiter.RecordFailure(time.Now(), keys...)
 
-	// The outcome is deliberately not reflected in the response: an unknown
-	// username used to 500 while a known one 200'd, which told an anonymous
-	// caller exactly which accounts exist. The old 200 body also disclosed the
-	// server's absolute data directory.
+	// The endpoint is unauthenticated, so the response must not vary on
+	// whether the account exists, and must not name the file it wrote:
+	// either would answer questions an anonymous caller shouldn't get to ask.
 	if err := h.service.RequestPasswordResetWithFile(req.Username); err != nil {
 		if !errors.Is(err, ErrUserNotFound) {
 			log.Printf("Failed to generate reset code: %v", err)

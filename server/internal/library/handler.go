@@ -72,9 +72,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/albums/{id}/tracks", user(h.HandleListAlbumTracks))
 }
 
-// writeServiceError maps a service-layer error onto a response. Access
-// failures must surface as 403 rather than the generic 500 the read paths
-// previously returned for everything.
+// writeServiceError maps a service-layer error onto a response, keeping the
+// distinction between "you may not" and "we broke" that a blanket 500 loses.
 func writeServiceError(w http.ResponseWriter, err error, msg string) {
 	switch {
 	case errors.Is(err, ErrLibraryAccessDenied):

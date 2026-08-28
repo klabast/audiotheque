@@ -193,8 +193,8 @@ func (w *Worker) processJob(job *library.ScanJob) bool {
 
 	log.Printf("Starting scan for library %d (job %d)", job.LibraryID, job.ID)
 
-	// Mark job as running. Counters are per-run: a job resumed after a crash
-	// carries the previous run's values, and total_files is recomputed below.
+	// Counters are per-run: a job resumed after a crash carries the previous
+	// run's values, and total_files is recomputed below.
 	now := time.Now().UTC()
 	job.StartedAt = &now
 	job.Status = "running"
@@ -457,10 +457,6 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 }
 
 // removeVanishedTracks deletes tracks whose files the walk did not visit.
-//
-// Scanning used to be add/update-only, so deleting an album from disk left its
-// tracks in the database and the search index forever: they kept showing in the
-// grid and streaming them returned a server error.
 //
 // It refuses to delete anything if the walk hit an error, because an unreadable
 // path — an unmounted NFS share, a permissions change — looks exactly like

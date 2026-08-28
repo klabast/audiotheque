@@ -182,8 +182,8 @@ func (h *Hub) Run() {
 			// A full buffer means this client is reading slower than we are
 			// broadcasting, not that it is gone: drop the message for that
 			// client and let the keepalive deadline decide whether it is dead.
-			// Evicting here disconnected backgrounded tabs and phones on weak
-			// links for the duration of every scan.
+			// A backgrounded tab whose write pump the browser throttles is the
+			// common case.
 			var dropped int
 			h.mu.RLock()
 			for client := range h.clients {

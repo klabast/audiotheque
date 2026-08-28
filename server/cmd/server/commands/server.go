@@ -174,8 +174,7 @@ func startServer() error {
 	// exceptClientID lets us skip the originating client (e.g. the browser
 	// that just sent its position tick) so it doesn't get its own value back.
 	// Capabilities come from the service so a WS push and a REST response can
-	// never disagree about the same device — this used to be a second,
-	// subtly different probe that defaulted Volume the other way.
+	// never disagree about the same device.
 	playbackService.SetBroadcaster(playback.SessionBroadcasterFunc(func(userID int64, session *playback.Session, exceptClientID string) {
 		msg := websocket.Message{
 			Type: "playback-session",

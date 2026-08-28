@@ -30,9 +30,9 @@ func cookieSecure(r *http.Request) bool {
 	return trustProxyHeaders() && strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
-// setSessionCookie writes the session cookie with the lifetime matching the
-// session's RememberMe flag. Centralised so login, setup and renewal stay in
-// sync with the session row's own window.
+// setSessionCookie writes the session cookie. Its Max-Age comes from
+// SessionWindowFor, the same source CreateSession and sliding renewal use, so
+// the browser's expiry can't drift from the session row's.
 func setSessionCookie(w http.ResponseWriter, r *http.Request, value string, rememberMe bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -45,8 +45,6 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, value string, reme
 	})
 }
 
-// clearSessionCookie expires the session cookie immediately. Used on logout
-// once the server-side session row has been deleted.
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -60,8 +58,7 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 }
 
 // currentSessionID returns the raw session id from the request cookie, or ""
-// if no cookie is present. Used by the session-management endpoints to flag
-// the caller's "current" row and to spare it from bulk revoke.
+// if no cookie is present.
 func currentSessionID(r *http.Request) string {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
@@ -70,8 +67,6 @@ func currentSessionID(r *http.Request) string {
 	return cookie.Value
 }
 
-// sessionContextFromRequest captures user-agent + client IP for the session
-// row.
 func sessionContextFromRequest(r *http.Request, rememberMe bool) SessionContext {
 	return SessionContext{
 		RememberMe: rememberMe,
