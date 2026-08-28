@@ -110,6 +110,16 @@ func (r *fakeRepository) Create(username, passwordHash string, isAdmin bool) (*U
 	return u, nil
 }
 
+// CreateFirstAdmin mirrors the SQLite repository's conditional insert: it
+// succeeds only while no user exists, so setup-conflict handling is exercised
+// here the same way it behaves against a real database.
+func (r *fakeRepository) CreateFirstAdmin(username, passwordHash string) (*User, error) {
+	if len(r.usersByID) > 0 {
+		return nil, ErrSetupAlreadyCompleted
+	}
+	return r.Create(username, passwordHash, true)
+}
+
 func (r *fakeRepository) Delete(userID int64) error {
 	u, ok := r.usersByID[userID]
 	if !ok {

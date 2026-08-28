@@ -40,6 +40,15 @@ func (m *mockRepository) Create(username, passwordHash string, isAdmin bool) (*U
 	return user, nil
 }
 
+// CreateFirstAdmin mirrors the SQLite repository's conditional insert: it
+// succeeds only while no user exists.
+func (m *mockRepository) CreateFirstAdmin(username, passwordHash string) (*User, error) {
+	if len(m.usersID) > 0 {
+		return nil, ErrSetupAlreadyCompleted
+	}
+	return m.Create(username, passwordHash, true)
+}
+
 func (m *mockRepository) UpdatePassword(userID int64, newPasswordHash string) error {
 	user, exists := m.usersID[userID]
 	if !exists {

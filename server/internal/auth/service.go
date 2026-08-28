@@ -22,6 +22,12 @@ type Repository interface {
 	// settings panel.
 	ListUsers() ([]*User, error)
 	Create(username, passwordHash string, isAdmin bool) (*User, error)
+	// CreateFirstAdmin inserts the initial admin only while the user table is
+	// still empty, in a single statement, returning ErrSetupAlreadyCompleted
+	// otherwise. /api/auth/setup is unauthenticated and hashing takes ~100ms,
+	// so a check-then-insert leaves a wide window in which two requests both
+	// see an empty table and both succeed — the second one an attacker's admin.
+	CreateFirstAdmin(username, passwordHash string) (*User, error)
 	// Delete removes a user row. Cascades to dependent rows (sessions,
 	// reset codes, etc.) via FK ON DELETE CASCADE.
 	Delete(userID int64) error
@@ -33,15 +39,6 @@ type Repository interface {
 	DeleteResetCode(code string) error
 	DeleteResetCodesByUserID(userID int64) error
 	DeleteExpiredResetCodes() error
-}
-
-// firstAdminCreator inserts the initial admin only if the user table is still
-// empty, in one statement. Kept off the Repository interface so the fakes in
-// other packages keep compiling; the SQLite repository implements it, and
-// CreateFirstUser falls back to the racy check-then-insert only for a
-// repository that doesn't (test doubles).
-type firstAdminCreator interface {
-	CreateFirstAdmin(username, passwordHash string) (*User, error)
 }
 
 // Service handles authentication business logic
@@ -338,7 +335,7 @@ func (s *Service) CreateFirstUser(username, password string, ctx SessionContext)
 		return "", nil, err
 	}
 
-	user, err := s.createFirstAdmin(username, passwordHash)
+	user, err := s.repo.CreateFirstAdmin(username, passwordHash)
 	if err != nil {
 		return "", nil, err
 	}
@@ -350,25 +347,6 @@ func (s *Service) CreateFirstUser(username, password string, ctx SessionContext)
 	}
 
 	return sessionID, user, nil
-}
-
-// createFirstAdmin inserts the initial admin. /api/auth/setup is
-// unauthenticated and hashing takes ~100ms, so a check-then-insert leaves a
-// wide window in which two requests both see an empty table and both succeed
-// — the second one an attacker's admin. Repositories that can do the check
-// and the insert in one statement do so.
-func (s *Service) createFirstAdmin(username, passwordHash string) (*User, error) {
-	if creator, ok := s.repo.(firstAdminCreator); ok {
-		return creator.CreateFirstAdmin(username, passwordHash)
-	}
-	count, err := s.repo.GetUserCount()
-	if err != nil {
-		return nil, err
-	}
-	if count > 0 {
-		return nil, ErrSetupAlreadyCompleted
-	}
-	return s.repo.Create(username, passwordHash, true)
 }
 
 // ListUsers returns every user row, ordered by id. Caller is expected to
@@ -451,7 +429,7 @@ func (s *Service) CreateUser(username, password string, isAdmin bool) (*User, er
 	}
 
 	if count == 0 {
-		return s.createFirstAdmin(username, passwordHash)
+		return s.repo.CreateFirstAdmin(username, passwordHash)
 	}
 	return s.repo.Create(username, passwordHash, isAdmin)
 }

@@ -46,8 +46,11 @@ func (m *mockAuthRepository) ListUsers() ([]*auth.User, error) {
 }
 func (m *mockAuthRepository) Delete(int64) error                              { return nil }
 func (m *mockAuthRepository) Create(string, string, bool) (*auth.User, error) { return nil, nil }
-func (m *mockAuthRepository) UpdatePassword(int64, string) error              { return nil }
-func (m *mockAuthRepository) StoreResetCode(string, int64, time.Time) error   { return nil }
+func (m *mockAuthRepository) CreateFirstAdmin(string, string) (*auth.User, error) {
+	return nil, auth.ErrSetupAlreadyCompleted
+}
+func (m *mockAuthRepository) UpdatePassword(int64, string) error            { return nil }
+func (m *mockAuthRepository) StoreResetCode(string, int64, time.Time) error { return nil }
 func (m *mockAuthRepository) GetResetCode(string) (*auth.ResetCode, error) {
 	return nil, auth.ErrInvalidResetCode
 }

@@ -159,6 +159,10 @@ func (m *mockAuthRepository) Create(username, passwordHash string, isAdmin bool)
 	return nil, nil
 }
 
+func (m *mockAuthRepository) CreateFirstAdmin(username, passwordHash string) (*auth.User, error) {
+	return nil, auth.ErrSetupAlreadyCompleted
+}
+
 func (m *mockAuthRepository) UpdatePassword(userID int64, passwordHash string) error {
 	return nil
 }
