@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -11,10 +12,23 @@ import (
 // Argon2id hash at 64MB, which makes unlimited login a cheap way to exhaust
 // memory. Failures are what's counted; a successful attempt clears the
 // buckets, so ordinary use never runs into the limit.
+// The per-account bucket is what actually protects an account, so it stays
+// tight. The per-IP bucket aggregates every account's mistakes behind one
+// address — a household NAT, a reverse proxy — so holding it to the same
+// number locks out a whole home because one person fat-fingered a few times.
+// It is still far below what an online guessing attack needs: 50 tries per
+// quarter hour is 200/hour against a single unknown password.
 const (
-	CredentialFailureLimit  = 10
-	CredentialFailureWindow = 15 * time.Minute
+	CredentialFailureLimit   = 10
+	CredentialIPFailureLimit = 50
+	CredentialFailureWindow  = 15 * time.Minute
 )
+
+// looseIPPrefix marks the one scope whose per-IP bucket is widened: password
+// entry, where every account behind a shared address lands in the same bucket.
+// Reset-code guessing keeps the tight limit on its IP bucket, since that
+// endpoint has no username to key on and a code is the whole credential.
+const looseIPPrefix = scopeCredential + "|ip:"
 
 // rateLimiterMaxKeys caps memory for the in-process bucket map. Reaching it
 // triggers a sweep of buckets that have fully aged out.
@@ -26,16 +40,27 @@ const rateLimiterMaxKeys = 4096
 type rateLimiter struct {
 	mu       sync.Mutex
 	limit    int
+	ipLimit  int
 	window   time.Duration
 	failures map[string][]time.Time
 }
 
-func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+func newRateLimiter(limit, ipLimit int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
 		limit:    limit,
+		ipLimit:  ipLimit,
 		window:   window,
 		failures: make(map[string][]time.Time),
 	}
+}
+
+// limitFor returns the bucket size for a key. Per-IP buckets are looser than
+// per-account ones — see the constants above.
+func (l *rateLimiter) limitFor(key string) int {
+	if strings.HasPrefix(key, looseIPPrefix) {
+		return l.ipLimit
+	}
+	return l.limit
 }
 
 // Allow reports whether an attempt against all of keys may proceed.
@@ -54,7 +79,7 @@ func (l *rateLimiter) Allow(now time.Time, keys ...string) bool {
 		} else {
 			l.failures[key] = recent
 		}
-		if len(recent) >= l.limit {
+		if len(recent) >= l.limitFor(key) {
 			return false
 		}
 	}

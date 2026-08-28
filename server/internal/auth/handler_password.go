@@ -202,7 +202,7 @@ func (h *Handler) HandleConfirmPasswordReset(w http.ResponseWriter, r *http.Requ
 	}
 
 	// A reset code is 8 Base32 characters — guessable in bulk without a limit.
-	keys := rateLimitKeys(scopeCredential, r, "")
+	keys := rateLimitKeys(scopeResetConfirm, r, "")
 	if !h.allowCredentialAttempt(w, keys) {
 		return
 	}

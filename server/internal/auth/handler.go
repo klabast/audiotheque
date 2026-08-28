@@ -15,7 +15,7 @@ type Handler struct {
 func NewHandler(service *Service) *Handler {
 	return &Handler{
 		service: service,
-		limiter: newRateLimiter(CredentialFailureLimit, CredentialFailureWindow),
+		limiter: newRateLimiter(CredentialFailureLimit, CredentialIPFailureLimit, CredentialFailureWindow),
 	}
 }
 
@@ -63,6 +63,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 const (
 	scopeCredential   = "credential"
 	scopeResetRequest = "reset-request"
+	// scopeResetConfirm is separate from scopeCredential because it has no
+	// username to key on, so its IP bucket is the only bound there is — it
+	// keeps the tight limit rather than the widened shared-address one.
+	scopeResetConfirm = "reset-confirm"
 )
 
 // rateLimitKeys builds the buckets an attempt is counted against: the
