@@ -4,7 +4,7 @@
 # 2. audiod-base:runtime - Alpine-based for minimal runtime deployment
 
 # Ubuntu-based builder image with Go and FFmpeg (minimal install)
-FROM golang:1.26-trixie AS audiod-builder
+FROM golang:1.27-trixie AS audiod-builder
 
 # Install FFmpeg without GUI dependencies
 RUN apt-get update && apt-get install -y \
@@ -37,7 +37,7 @@ LABEL org.opencontainers.image.description="Audiotheque builder image with Go an
 LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 # Alpine-based runtime image - minimal size for deployment
-FROM alpine:3.23 AS audiod-runtime
+FROM alpine:3.24 AS audiod-runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
