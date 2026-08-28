@@ -330,7 +330,7 @@ func TestService_TransferPlayback_SavesAndRestoresVolume(t *testing.T) {
 	mpdDevice := &mockPlaybackDevice{state: "play", volume: 40, seekPosition: 10}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": &BrowserPlaybackDevice{},
 		},
 	}
@@ -367,7 +367,7 @@ func TestService_TransferPlayback_RoundTrip_PerDeviceVolume(t *testing.T) {
 	browserDevice := &mockPlaybackDevice{volume: 80}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": browserDevice,
 		},
 	}
@@ -430,7 +430,7 @@ func TestService_TransferPlayback_MultiHop_PreservesPosition(t *testing.T) {
 	mpdDevice := &mockPlaybackDevice{state: "stop", volume: 100}
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 			"c-browser-1": &BrowserPlaybackDevice{},
 		},
 	}
@@ -545,12 +545,12 @@ func TestService_Pause_DeviceFailureReturnsError(t *testing.T) {
 type failingMockDevice struct{ err error }
 
 func (f *failingMockDevice) Play(string, int) error { return f.err }
-func (f *failingMockDevice) Pause() error            { return f.err }
-func (f *failingMockDevice) Resume() error           { return f.err }
-func (f *failingMockDevice) Stop() error             { return f.err }
-func (f *failingMockDevice) Seek(int) error          { return f.err }
-func (f *failingMockDevice) SetVolume(int) error     { return f.err }
-func (f *failingMockDevice) SupportsVolume() bool    { return true }
+func (f *failingMockDevice) Pause() error           { return f.err }
+func (f *failingMockDevice) Resume() error          { return f.err }
+func (f *failingMockDevice) Stop() error            { return f.err }
+func (f *failingMockDevice) Seek(int) error         { return f.err }
+func (f *failingMockDevice) SetVolume(int) error    { return f.err }
+func (f *failingMockDevice) SupportsVolume() bool   { return true }
 func (f *failingMockDevice) Status() (DeviceStatus, error) {
 	return DeviceStatus{State: "play"}, nil
 }
@@ -798,7 +798,7 @@ func TestService_TransferPlayback_RestoreVolumeNotSupportedDoesNotError(t *testi
 	resolver := &mockDeviceResolver{
 		devices: map[string]PlaybackDevice{
 			"c-browser-1": browserDevice,
-			"mpd-1": mpdDevice,
+			"mpd-1":       mpdDevice,
 		},
 	}
 	existingSession := &Session{

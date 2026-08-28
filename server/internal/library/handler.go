@@ -29,9 +29,9 @@ type ServiceInterface interface {
 }
 
 type Handler struct {
-	service      ServiceInterface
-	authService  *auth.Service
-	thumbnailer  *CoverThumbnailer
+	service     ServiceInterface
+	authService *auth.Service
+	thumbnailer *CoverThumbnailer
 }
 
 func NewHandler(service ServiceInterface, authService *auth.Service) *Handler {

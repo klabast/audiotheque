@@ -15,17 +15,17 @@ import (
 
 // mockService implements ServiceInterface for handler tests
 type mockService struct {
-	startScanError        error
-	getScanProgressError  error
-	scanProgress          *ScanProgress
-	libraries             []*Library
-	createLibraryResult   *Library
-	createLibraryError    error
-	deleteLibraryError    error
-	updateLibraryResult   *Library
-	updateLibraryError    error
-	albumCoverPath        string
-	getAlbumCoverPathErr  error
+	startScanError       error
+	getScanProgressError error
+	scanProgress         *ScanProgress
+	libraries            []*Library
+	createLibraryResult  *Library
+	createLibraryError   error
+	deleteLibraryError   error
+	updateLibraryResult  *Library
+	updateLibraryError   error
+	albumCoverPath       string
+	getAlbumCoverPathErr error
 }
 
 func (m *mockService) ListLibraries(userID int64) ([]*Library, error) {

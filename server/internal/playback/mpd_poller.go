@@ -101,12 +101,12 @@ func (s *Service) StartMPDPolling(ctx context.Context, interval time.Duration) {
 //  4. state=pause → no-op (clients own pause-state transitions).
 //  5. state=stop:
 //     - !observedPlay → device never started for this song. Skip.
-//       This kills the audio-wz blast-loop where MPD lingers in stop
-//       while loading the URL.
+//     This kills the audio-wz blast-loop where MPD lingers in stop
+//     while loading the URL.
 //     - observedPlay → real track-end. Pre-clear observedPlay to absorb
-//       the inevitable extra stop tick during MPD's Clear+Add+Play, then
-//       call Next(). The post-Next persistAndBroadcast hits trackMPDState
-//       which seeds a fresh entry for the new track.
+//     the inevitable extra stop tick during MPD's Clear+Add+Play, then
+//     call Next(). The post-Next persistAndBroadcast hits trackMPDState
+//     which seeds a fresh entry for the new track.
 //  6. state="" (some MPD versions when fully idle) → conservative skip.
 func (s *Service) PollMPDPositions() {
 	s.activeMPDUsers.Range(func(key, value any) bool {

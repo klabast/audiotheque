@@ -1,9 +1,6 @@
 package commands
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"audiod/internal/auth"
 	"audiod/internal/branding"
 	"audiod/internal/config"
@@ -16,6 +13,9 @@ import (
 	"audiod/internal/settings"
 	"audiod/internal/system"
 	"audiod/internal/websocket"
+	"context"
+	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"

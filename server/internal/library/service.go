@@ -64,28 +64,6 @@ func (s *Service) CreateLibrary(userID int64, name string, paths []string) (*Lib
 	return library, nil
 }
 
-// ScanLibrary scans a library's paths for audio files and indexes them
-func (s *Service) ScanLibrary(libraryID int64) (*ScanStats, error) {
-	// Get the library
-	library, err := s.repo.GetLibraryByID(libraryID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Initialize stats
-	stats := &ScanStats{
-		FilesScanned: 0,
-		TracksAdded:  0,
-		Errors:       0,
-	}
-
-	// For now, just return empty stats
-	// TODO: Walk filesystem paths and scan audio files
-	_ = library // Use library to avoid unused variable error
-
-	return stats, nil
-}
-
 // StartScan queues a scan for a library
 // Returns immediately. Scanner worker will pick up the job.
 func (s *Service) StartScan(libraryID int64) error {

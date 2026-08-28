@@ -590,4 +590,3 @@ func generateResetCode() (string, error) {
 
 	return code, nil
 }
-

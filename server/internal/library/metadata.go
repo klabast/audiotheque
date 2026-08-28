@@ -22,9 +22,9 @@ type AudioMetadata struct {
 	Genre       string
 
 	// MusicBrainz IDs (extracted from raw tags)
-	MusicBrainzTrackID   string
-	MusicBrainzAlbumID   string
-	MusicBrainzArtistID  string
+	MusicBrainzTrackID  string
+	MusicBrainzAlbumID  string
+	MusicBrainzArtistID string
 
 	// Cover art
 	HasPicture  bool

@@ -104,17 +104,17 @@ func (r *DBSessionRepository) GetByUserID(userID int64) (*Session, error) {
 	`
 
 	var (
-		state            string
-		currentTrackID   sql.NullInt64
-		currentPosition  int
-		sourceType       string
-		sourceID         int64
-		sourceRemaining  string
-		queueJSON        string
-		historyJSON      string
-		deviceID         string
-		deviceVolumes    string
-		isPrivate        bool
+		state           string
+		currentTrackID  sql.NullInt64
+		currentPosition int
+		sourceType      string
+		sourceID        int64
+		sourceRemaining string
+		queueJSON       string
+		historyJSON     string
+		deviceID        string
+		deviceVolumes   string
+		isPrivate       bool
 	)
 
 	err := r.db.QueryRow(query, userID).Scan(

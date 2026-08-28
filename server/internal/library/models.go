@@ -151,13 +151,6 @@ func IsSupportedAudioFile(path string) bool {
 	return SupportedAudioExtensions[ext]
 }
 
-// ScanStats represents statistics from a library scan
-type ScanStats struct {
-	FilesScanned int
-	TracksAdded  int
-	Errors       int
-}
-
 // ScanProgress represents real-time scan progress (for WebSocket broadcast)
 type ScanProgress struct {
 	LibraryID      int64     `json:"libraryId"`

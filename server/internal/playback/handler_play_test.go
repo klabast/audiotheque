@@ -27,11 +27,11 @@ func (s *stubService) PlayAlbumOnDevice(userID, albumID, startTrackID int64, dev
 	return &Session{UserID: userID, State: StatePlaying, DeviceID: deviceID,
 		Current: &CurrentTrack{TrackID: 1, Position: 0}}, nil
 }
-func (s *stubService) GetSession(userID int64) (*Session, error)        { return nil, nil }
-func (s *stubService) Pause(userID int64, p int) (*Session, error)      { return nil, nil }
-func (s *stubService) Resume(userID int64) (*Session, error)            { return nil, nil }
-func (s *stubService) Next(userID int64) (*Session, error)              { return nil, nil }
-func (s *stubService) Previous(userID int64) (*Session, error)          { return nil, nil }
+func (s *stubService) GetSession(userID int64) (*Session, error)   { return nil, nil }
+func (s *stubService) Pause(userID int64, p int) (*Session, error) { return nil, nil }
+func (s *stubService) Resume(userID int64) (*Session, error)       { return nil, nil }
+func (s *stubService) Next(userID int64) (*Session, error)         { return nil, nil }
+func (s *stubService) Previous(userID int64) (*Session, error)     { return nil, nil }
 func (s *stubService) TransferPlayback(u int64, d string) (*Session, error) {
 	s.lastTransferDeviceID = d
 	return &Session{UserID: u, DeviceID: d}, nil

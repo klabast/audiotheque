@@ -84,9 +84,9 @@ type Session struct {
 	UserID        int64
 	State         State
 	Current       *CurrentTrack
-	Queue         []QueueItem    // Explicit queue (Play Next / Add to Queue)
-	Source        Source          // What we're playing through
-	History       []int64        // Track IDs already played (for going back)
+	Queue         []QueueItem // Explicit queue (Play Next / Add to Queue)
+	Source        Source      // What we're playing through
+	History       []int64     // Track IDs already played (for going back)
 	IsPrivate     bool
 	DeviceID      string         // Which device is playing (empty = browser, or MPD device ID)
 	DeviceVolumes map[string]int // Per-device volume (device ID → 0-100). "" = browser.

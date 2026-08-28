@@ -478,67 +478,6 @@ func TestCreateLibraryWithoutPaths(t *testing.T) {
 	}
 }
 
-// TestScanLibrary tests that scanning a library processes audio files
-func TestScanLibrary(t *testing.T) {
-	// Arrange
-	repo := newMockRepository()
-	service := NewService(repo)
-	libraryID := int64(1)
-
-	// Create a library with a test path (empty for now, actual scanning tested in integration)
-	library := &Library{
-		ID:    libraryID,
-		Name:  "Test Music",
-		Paths: []string{"/tmp/test-music"},
-	}
-	repo.libraries[1] = []*Library{library}
-
-	// Act
-	stats, err := service.ScanLibrary(libraryID)
-
-	// Assert
-	if err != nil {
-		t.Fatalf("ScanLibrary() failed: %v", err)
-	}
-
-	if stats == nil {
-		t.Fatal("ScanLibrary() returned nil stats")
-	}
-
-	// Stats should be initialized (even if zero)
-	if stats.FilesScanned < 0 {
-		t.Error("Expected non-negative FilesScanned")
-	}
-
-	if stats.TracksAdded < 0 {
-		t.Error("Expected non-negative TracksAdded")
-	}
-
-	if stats.Errors < 0 {
-		t.Error("Expected non-negative Errors")
-	}
-}
-
-// TestScanLibraryNotFound tests that scanning a non-existent library fails
-func TestScanLibraryNotFound(t *testing.T) {
-	// Arrange
-	repo := newMockRepository()
-	service := NewService(repo)
-	nonExistentID := int64(999)
-
-	// Act
-	stats, err := service.ScanLibrary(nonExistentID)
-
-	// Assert
-	if err != ErrLibraryNotFound {
-		t.Errorf("Expected ErrLibraryNotFound, got %v", err)
-	}
-
-	if stats != nil {
-		t.Error("Expected nil stats, got non-nil")
-	}
-}
-
 // ==============================================================================
 // New Scanner Tests (TDD - RED phase)
 // ==============================================================================
@@ -663,12 +602,12 @@ func TestGetScanProgress_ReturnsProgress(t *testing.T) {
 // TestService_StartScan_AfterOrphanReset_QueuesNewJob documents the user-path
 // fix for bug 1 (409 Conflict after container restart):
 //
-//   1. Before the fix, a stale 'running' scan_queue row with a fresh heartbeat
-//      caused StartScan to keep returning ErrScanAlreadyInProgress.
-//   2. The worker's boot-time reset (ResetAllRunningJobs) clears the row to
-//      'pending'.
-//   3. The worker then picks up the pending row and either completes the scan
-//      or — once the user re-queues — a new row is queued.
+//  1. Before the fix, a stale 'running' scan_queue row with a fresh heartbeat
+//     caused StartScan to keep returning ErrScanAlreadyInProgress.
+//  2. The worker's boot-time reset (ResetAllRunningJobs) clears the row to
+//     'pending'.
+//  3. The worker then picks up the pending row and either completes the scan
+//     or — once the user re-queues — a new row is queued.
 //
 // This test walks through that sequence at the service layer.
 func TestService_StartScan_AfterOrphanReset_QueuesNewJob(t *testing.T) {

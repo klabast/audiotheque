@@ -47,8 +47,8 @@ func TestDBSessionRepository_RoundTrip(t *testing.T) {
 		Queue: []QueueItem{
 			{TrackID: 11, AddedFromID: 200, AddedFrom: SourceTypePlaylist},
 		},
-		History:   []int64{1, 2, 3},
-		DeviceID:  "mpd-living-room",
+		History:  []int64{1, 2, 3},
+		DeviceID: "mpd-living-room",
 		DeviceVolumes: map[string]int{
 			"":                70, // browser
 			"mpd-living-room": 55,
@@ -203,9 +203,9 @@ func TestDBSessionRepository_DeleteWithoutDeviceRemovesRows(t *testing.T) {
 
 	// One row with no device (target of the sweep), one with a device.
 	if err := repo.Save(&Session{
-		UserID:  1,
-		State:   StateStopped,
-		Source:  Source{Type: SourceTypeAlbum, ID: 1, Remaining: []int64{}},
+		UserID: 1,
+		State:  StateStopped,
+		Source: Source{Type: SourceTypeAlbum, ID: 1, Remaining: []int64{}},
 	}); err != nil {
 		t.Fatalf("Save deviceless: %v", err)
 	}

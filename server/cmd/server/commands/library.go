@@ -5,6 +5,7 @@ import (
 	"audiod/internal/cli"
 	"audiod/internal/library"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -270,12 +271,8 @@ func followScanProgress(service *library.Service, libraryID int64) error {
 			return nil
 		}
 
-		// Wait before next check
-		// time.Sleep(500 * time.Millisecond)
-		// For now, just exit after first check since scan completes instantly
-		break
+		time.Sleep(500 * time.Millisecond)
 	}
-	return nil
 }
 
 var libraryDeleteCmd = &cobra.Command{
