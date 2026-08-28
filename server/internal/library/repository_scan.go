@@ -151,7 +151,13 @@ func (r *repository) ResetOrphanedJobs(timeout time.Duration) (int64, error) {
 	//language=SQL
 	query := `
 UPDATE scan_queue
-SET status = 'pending', started_at = NULL, updated_at = CURRENT_TIMESTAMP
+SET status = 'pending',
+    started_at = NULL,
+    processed_files = 0,
+    tracks_added = 0,
+    tracks_updated = 0,
+    errors = 0,
+    updated_at = CURRENT_TIMESTAMP
 WHERE status = 'running' AND updated_at < ?`
 
 	result, err := r.db.Exec(query, cutoff)
@@ -169,7 +175,13 @@ func (r *repository) ResetAllRunningJobs() (int64, error) {
 	//language=SQL
 	query := `
 UPDATE scan_queue
-SET status = 'pending', started_at = NULL, updated_at = CURRENT_TIMESTAMP
+SET status = 'pending',
+    started_at = NULL,
+    processed_files = 0,
+    tracks_added = 0,
+    tracks_updated = 0,
+    errors = 0,
+    updated_at = CURRENT_TIMESTAMP
 WHERE status = 'running'`
 
 	result, err := r.db.Exec(query)

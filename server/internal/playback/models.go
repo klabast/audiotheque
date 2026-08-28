@@ -73,9 +73,17 @@ type Device struct {
 	UserID  int64
 }
 
-// Domain errors for devices
+// Domain errors for devices.
+//
+// The distinction matters to callers that clean up state: ErrDeviceNotFound
+// means the device is permanently gone (unregistered, or a browser tab whose
+// client ID no longer exists) so a session bound to it is an orphan.
+// ErrDeviceUnreachable means the device is still registered but the server
+// couldn't talk to it right now — an MPD box rebooting, a LAN hiccup. Those
+// must never destroy session state.
 var (
-	ErrDeviceNotFound = errors.New("device not found")
+	ErrDeviceNotFound    = errors.New("device not found")
+	ErrDeviceUnreachable = errors.New("device unreachable")
 )
 
 // Session represents a user's playback session
@@ -88,6 +96,6 @@ type Session struct {
 	Source        Source      // What we're playing through
 	History       []int64     // Track IDs already played (for going back)
 	IsPrivate     bool
-	DeviceID      string         // Which device is playing (empty = browser, or MPD device ID)
-	DeviceVolumes map[string]int // Per-device volume (device ID → 0-100). "" = browser.
+	DeviceID      string         // Owning device: a browser-tab client ID or an MPD device ID. Never empty for a live session.
+	DeviceVolumes map[string]int // Per-device volume (device ID → 0-100)
 }

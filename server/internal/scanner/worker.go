@@ -20,6 +20,8 @@ const (
 	MaintenanceInterval = 30 * time.Second
 	// ShutdownTimeout is how long to wait for current job to finish during shutdown
 	ShutdownTimeout = 30 * time.Second
+	// ProgressThrottle bounds how often a 'scan-progress' event is emitted.
+	ProgressThrottle = 500 * time.Millisecond
 	// LibraryUpdatedThrottle bounds how often a per-library 'library-updated'
 	// event is emitted during a busy scan. The UI debounces its own refetch on
 	// top of this, but throttling at the source keeps the WS quiet.
@@ -42,6 +44,11 @@ type Worker struct {
 	stop                chan struct{}
 	wg                  sync.WaitGroup // tracks running job for graceful shutdown
 
+	// extractMetadata is library.ExtractMetadata in production. It is a field so
+	// tests can drive the panic path, which real corrupt files reach but a
+	// fixture cannot reliably reproduce.
+	extractMetadata func(path string) (*library.AudioMetadata, error)
+
 	// Progress throttling (per-library)
 	lastBroadcast map[int64]time.Time
 
@@ -56,6 +63,7 @@ func NewWorker(repo library.Repository, broadcaster Broadcaster) *Worker {
 	return &Worker{
 		broadcaster:                 broadcaster,
 		repo:                        repo,
+		extractMetadata:             library.ExtractMetadata,
 		dataDir:                     config.GetDataDir(),
 		interval:                    2 * time.Second,
 		maintenanceInterval:         MaintenanceInterval,
@@ -151,6 +159,14 @@ func (w *Worker) run() {
 // processPendingScans picks up and processes pending scan jobs
 func (w *Worker) processPendingScans() {
 	for {
+		// Shutdown was requested: leave anything still queued for the next
+		// process rather than starting work main is about to close the DB under.
+		select {
+		case <-w.stop:
+			return
+		default:
+		}
+
 		// Get oldest pending job
 		job, err := w.repo.GetPendingScan()
 		if err != nil {
@@ -161,33 +177,45 @@ func (w *Worker) processPendingScans() {
 			return // No pending jobs
 		}
 
-		// Process the job
-		w.processJob(job)
+		// A job that could not be claimed stays pending, so continuing the loop
+		// would re-fetch the same row forever. Back off to the next tick instead.
+		if !w.processJob(job) {
+			return
+		}
 	}
 }
 
-// processJob processes a single scan job
-func (w *Worker) processJob(job *library.ScanJob) {
+// processJob processes a single scan job, reporting whether the queue can be
+// drained further.
+func (w *Worker) processJob(job *library.ScanJob) bool {
 	w.wg.Add(1)
 	defer w.wg.Done()
 
 	log.Printf("Starting scan for library %d (job %d)", job.LibraryID, job.ID)
 
-	// Mark job as running
-	now := time.Now()
+	// Mark job as running. Counters are per-run: a job resumed after a crash
+	// carries the previous run's values, and total_files is recomputed below.
+	now := time.Now().UTC()
 	job.StartedAt = &now
 	job.Status = "running"
+	job.ProcessedFiles = 0
+	job.TracksAdded = 0
+	job.TracksUpdated = 0
+	job.Errors = 0
 	if err := w.repo.UpdateScanJob(job); err != nil {
-		log.Printf("Error updating job status: %v", err)
-		return
+		log.Printf("Error updating job status for job %d: %v", job.ID, err)
+		return false
 	}
 
 	// Get library details
 	lib, err := w.repo.GetLibraryByID(job.LibraryID)
 	if err != nil {
 		log.Printf("Error getting library %d: %v", job.LibraryID, err)
-		w.repo.DeleteScanJob(job.ID)
-		return
+		if err := w.repo.DeleteScanJob(job.ID); err != nil {
+			log.Printf("Error deleting job %d for missing library: %v", job.ID, err)
+			return false
+		}
+		return true
 	}
 
 	// Phase 1: Count files
@@ -202,11 +230,14 @@ func (w *Worker) processJob(job *library.ScanJob) {
 	}
 
 	// Phase 3: Walk and process files
+	seen := make(map[string]bool, len(existingTracks))
+	walkFailed := false
 	for _, basePath := range lib.Paths {
 		err := filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				log.Printf("Error accessing %s: %v", path, err)
 				job.Errors++
+				walkFailed = true
 				return nil // Continue walking
 			}
 
@@ -222,8 +253,11 @@ func (w *Worker) processJob(job *library.ScanJob) {
 			info, err := d.Info()
 			if err != nil {
 				job.Errors++
+				walkFailed = true
 				return nil
 			}
+
+			seen[path] = true
 
 			if modTime, exists := existingTracks[path]; exists {
 				if info.ModTime().Equal(modTime) {
@@ -241,8 +275,11 @@ func (w *Worker) processJob(job *library.ScanJob) {
 
 		if err != nil {
 			log.Printf("Error walking %s: %v", basePath, err)
+			walkFailed = true
 		}
 	}
+
+	w.removeVanishedTracks(lib.ID, existingTracks, seen, walkFailed)
 
 	// Phase 4: Complete - broadcast final progress then delete job
 	job.CurrentFile = ""
@@ -254,18 +291,36 @@ func (w *Worker) processJob(job *library.ScanJob) {
 	log.Printf("Scan completed for library %d: %d files, %d added, %d updated, %d errors",
 		job.LibraryID, job.ProcessedFiles, job.TracksAdded, job.TracksUpdated, job.Errors)
 
-	// Delete the job from the queue
+	// Delete the job from the queue. A row left behind still reads as 'running',
+	// which makes StartScan return ErrScanAlreadyInProgress for that library
+	// until the orphan sweep catches it.
 	if err := w.repo.DeleteScanJob(job.ID); err != nil {
-		log.Printf("Error deleting completed job: %v", err)
+		log.Printf("Error deleting completed job %d: %v", job.ID, err)
+		return false
 	}
+	return true
 }
 
-// processAudioFile extracts metadata and creates/updates database records
+// processAudioFile extracts metadata and creates/updates database records.
+//
+// It recovers from panics: metadata parsing reads attacker- or
+// corruption-supplied tag headers, and this runs on the worker goroutine, so an
+// unrecovered panic takes the whole server down and then crash-loops on the
+// same file after restart.
 func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo, job *library.ScanJob) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic processing %s: %v", path, r)
+			job.Errors++
+			job.ProcessedFiles++
+			w.throttledUpdateAndBroadcast(job)
+		}
+	}()
+
 	job.CurrentFile = path
 
 	// Extract metadata
-	meta, err := library.ExtractMetadata(path)
+	meta, err := w.extractMetadata(path)
 	if err != nil {
 		log.Printf("Error extracting metadata from %s: %v", path, err)
 		job.Errors++
@@ -401,6 +456,39 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 	}
 }
 
+// removeVanishedTracks deletes tracks whose files the walk did not visit.
+//
+// Scanning used to be add/update-only, so deleting an album from disk left its
+// tracks in the database and the search index forever: they kept showing in the
+// grid and streaming them returned a server error.
+//
+// It refuses to delete anything if the walk hit an error, because an unreadable
+// path — an unmounted NFS share, a permissions change — looks exactly like
+// "every file was removed", and that mistake is unrecoverable.
+func (w *Worker) removeVanishedTracks(libraryID int64, existing map[string]time.Time, seen map[string]bool, walkFailed bool) {
+	if walkFailed {
+		log.Printf("Skipping removal of missing tracks for library %d: the scan could not read every path", libraryID)
+		return
+	}
+
+	var vanished []string
+	for path := range existing {
+		if !seen[path] {
+			vanished = append(vanished, path)
+		}
+	}
+	if len(vanished) == 0 {
+		return
+	}
+
+	deleted, err := w.repo.DeleteTracksByPaths(libraryID, vanished)
+	if err != nil {
+		log.Printf("Error removing %d missing track(s) from library %d: %v", len(vanished), libraryID, err)
+		return
+	}
+	log.Printf("Removed %d track(s) no longer on disk from library %d", deleted, libraryID)
+}
+
 // countAudioFiles counts total audio files in paths
 func (w *Worker) countAudioFiles(paths []string) int {
 	count := 0
@@ -426,15 +514,19 @@ func (w *Worker) updateAndBroadcast(job *library.ScanJob) {
 	w.broadcastProgress(job, job.Status)
 }
 
-// throttledUpdateAndBroadcast limits updates to every 500ms or every 10 files
+// throttledUpdateAndBroadcast rate-limits progress updates.
+//
+// The every-10-files arm used to fire unconditionally, so a fast local-disk
+// scan emitted thousands of messages per second and overran the per-client
+// send buffers, which the hub treats as a dead client. Time is the bound; the
+// file count only decides when it is worth checking the clock.
 func (w *Worker) throttledUpdateAndBroadcast(job *library.ScanJob) {
 	now := time.Now()
-	lastBroadcast := w.lastBroadcast[job.LibraryID]
-
-	if job.ProcessedFiles%10 == 0 || now.Sub(lastBroadcast) >= 500*time.Millisecond {
-		w.updateAndBroadcast(job)
-		w.lastBroadcast[job.LibraryID] = now
+	if now.Sub(w.lastBroadcast[job.LibraryID]) < ProgressThrottle {
+		return
 	}
+	w.updateAndBroadcast(job)
+	w.lastBroadcast[job.LibraryID] = now
 }
 
 // broadcastProgress sends scan progress to WebSocket clients

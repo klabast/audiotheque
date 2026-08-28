@@ -35,8 +35,12 @@ func MintStreamToken(trackID, userID int64, ttl time.Duration) (string, error) {
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
+	secret, err := getJWTSecret()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve signing secret: %w", err)
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(getJWTSecret())
+	signed, err := token.SignedString(secret)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign stream token: %w", err)
 	}
@@ -53,7 +57,7 @@ func ValidateStreamToken(tokenString string, trackID int64) (int64, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		return getJWTSecret(), nil
+		return getJWTSecret()
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse stream token: %w", err)

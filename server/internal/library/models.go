@@ -65,6 +65,16 @@ const (
 	SortFieldYear        SortField = "year"
 )
 
+// ValidSortFields is the set of fields albums may be sorted by. The HTTP
+// boundary validates against this and the repository maps each entry to a SQL
+// expression, so a field can never be accepted without a column behind it.
+var ValidSortFields = map[SortField]bool{
+	SortFieldAlbumArtist: true,
+	SortFieldArtist:      true,
+	SortFieldAlbumTitle:  true,
+	SortFieldYear:        true,
+}
+
 // SortDirection is the ordering direction.
 type SortDirection string
 
@@ -217,6 +227,8 @@ type Repository interface {
 	ListTracksByAlbum(albumID int64) ([]*Track, error)
 	ListTracksByLibrary(libraryID int64) ([]*Track, error)
 	GetTrackPathsForLibrary(libraryID int64) (map[string]time.Time, error) // path -> modTime
+	// DeleteTracksByPaths removes tracks whose files are gone from disk.
+	DeleteTracksByPaths(libraryID int64, paths []string) (int64, error)
 
 	// Access control
 	UserHasLibraryAccess(userID, libraryID int64) (bool, error)
@@ -241,6 +253,7 @@ type Repository interface {
 // Domain errors
 var (
 	ErrLibraryNotFound       = errors.New("library not found")
+	ErrLibraryAccessDenied   = errors.New("library access denied")
 	ErrScanAlreadyInProgress = errors.New("scan already in progress")
 	ErrNoScanInProgress      = errors.New("no scan in progress")
 	ErrNameRequired          = errors.New("library name is required")

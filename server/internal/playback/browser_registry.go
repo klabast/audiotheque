@@ -30,15 +30,22 @@ type BrowserDevice struct {
 // reads a snapshot), writes are bursty during reconnects — RWMutex is fine.
 type BrowserDeviceRegistry struct {
 	mu             sync.RWMutex
-	devices        map[string]BrowserDevice // keyed by ClientID
-	pendingRemoval map[string]*time.Timer   // keyed by ClientID; armed by Unregister, disarmed by Register
+	devices        map[string]BrowserDevice   // keyed by ClientID
+	pendingRemoval map[string]*pendingRemoval // keyed by ClientID; armed by Unregister, disarmed by Register
+}
+
+// pendingRemoval is the token identifying one armed grace-period timer. The
+// timer's closure carries its own token and only removes the device if that
+// token is still the registry's current one for the client ID.
+type pendingRemoval struct {
+	timer *time.Timer
 }
 
 // NewBrowserDeviceRegistry returns an empty registry.
 func NewBrowserDeviceRegistry() *BrowserDeviceRegistry {
 	return &BrowserDeviceRegistry{
 		devices:        make(map[string]BrowserDevice),
-		pendingRemoval: make(map[string]*time.Timer),
+		pendingRemoval: make(map[string]*pendingRemoval),
 	}
 }
 
@@ -55,8 +62,8 @@ func (r *BrowserDeviceRegistry) Register(clientID string, userID int64, name str
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if timer, ok := r.pendingRemoval[clientID]; ok {
-		timer.Stop()
+	if pending, ok := r.pendingRemoval[clientID]; ok {
+		pending.timer.Stop()
 		delete(r.pendingRemoval, clientID)
 	}
 	r.devices[clientID] = BrowserDevice{
@@ -81,15 +88,29 @@ func (r *BrowserDeviceRegistry) Unregister(clientID string) {
 	if _, ok := r.devices[clientID]; !ok {
 		return
 	}
-	if timer, ok := r.pendingRemoval[clientID]; ok {
-		timer.Stop()
+	if prev, ok := r.pendingRemoval[clientID]; ok {
+		prev.timer.Stop()
 	}
-	r.pendingRemoval[clientID] = time.AfterFunc(disconnectGracePeriod, func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		delete(r.devices, clientID)
-		delete(r.pendingRemoval, clientID)
+	pending := &pendingRemoval{}
+	pending.timer = time.AfterFunc(disconnectGracePeriod, func() {
+		r.expireRemoval(clientID, pending)
 	})
+	r.pendingRemoval[clientID] = pending
+}
+
+// expireRemoval runs when a grace-period timer fires. It removes the device
+// only if pending is still the registry's current removal for clientID. A
+// timer that had already fired and was waiting on the mutex when Register ran
+// is no longer current: timer.Stop() returns false in that window, so without
+// this check the late closure would delete the tab that just reconnected.
+func (r *BrowserDeviceRegistry) expireRemoval(clientID string, pending *pendingRemoval) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.pendingRemoval[clientID] != pending {
+		return
+	}
+	delete(r.devices, clientID)
+	delete(r.pendingRemoval, clientID)
 }
 
 // Get returns the device for clientID and a boolean indicating presence.

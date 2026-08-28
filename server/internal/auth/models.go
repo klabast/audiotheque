@@ -10,6 +10,13 @@ var (
 	ErrInvalidPassword  = errors.New("invalid password")
 	ErrInvalidResetCode = errors.New("invalid or expired reset code")
 	ErrSessionNotFound  = errors.New("session not found or expired")
+
+	ErrSetupAlreadyCompleted = errors.New("setup already completed: users already exist")
+	ErrUsernameTaken         = errors.New("username already taken")
+	ErrFirstUserMustBeAdmin  = errors.New("first user must be an admin")
+	ErrCannotDeleteSelf      = errors.New("cannot delete the currently signed-in user")
+	ErrCannotDeleteLastAdmin = errors.New("cannot delete the last admin user")
+	ErrRateLimited           = errors.New("too many attempts")
 )
 
 // SessionWindowDefault is how long a session lasts when "Keep me logged in"
@@ -19,6 +26,20 @@ const (
 	SessionWindowDefault  = 30 * 24 * time.Hour
 	SessionWindowRemember = 90 * 24 * time.Hour
 )
+
+// ResetCodeTTL is how long a password-reset code (and its notification file)
+// stays valid.
+const ResetCodeTTL = 30 * time.Minute
+
+// SessionWindowFor returns the lifetime of a session opened — or renewed —
+// under the given "Keep me logged in" choice. Single source of truth for the
+// cookie Max-Age, the session row's expires_at, and sliding renewal.
+func SessionWindowFor(rememberMe bool) time.Duration {
+	if rememberMe {
+		return SessionWindowRemember
+	}
+	return SessionWindowDefault
+}
 
 // Session represents an active browser sign-in. The id is an opaque random
 // value stored in the audiod_token cookie; the row is the source of truth

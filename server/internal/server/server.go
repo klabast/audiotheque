@@ -49,15 +49,27 @@ func (s *Server) Router() http.Handler {
 	// Health check (kept in server as it's infrastructure)
 	mux.HandleFunc("GET /health", s.handleHealth)
 
-	// Register domain routes - each handler owns its routes
-	s.systemHandler.RegisterRoutes(mux)
-	s.authHandler.RegisterRoutes(mux)
-	s.libraryHandler.RegisterRoutes(mux)
-	s.playbackHandler.RegisterRoutes(mux)
+	// Register domain routes - each handler owns its routes. Handlers now wrap
+	// their routes in auth middleware at registration time, which reads fields
+	// off the handler, so a nil one has to be skipped rather than registered.
+	if s.systemHandler != nil {
+		s.systemHandler.RegisterRoutes(mux)
+	}
+	if s.authHandler != nil {
+		s.authHandler.RegisterRoutes(mux)
+	}
+	if s.libraryHandler != nil {
+		s.libraryHandler.RegisterRoutes(mux)
+	}
+	if s.playbackHandler != nil {
+		s.playbackHandler.RegisterRoutes(mux)
+	}
 	if s.settingsHandler != nil {
 		s.settingsHandler.RegisterRoutes(mux)
 	}
-	s.websocketHandler.RegisterRoutes(mux)
+	if s.websocketHandler != nil {
+		s.websocketHandler.RegisterRoutes(mux)
+	}
 
 	// Static SPA fallback. Anything not matched by an API route is served
 	// from AUDIOD_WEB_DIR (default /app/web in the Docker image; unset in

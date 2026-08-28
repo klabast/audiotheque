@@ -58,12 +58,11 @@ export class AuthService {
 		return response.user!;
 	}
 
-	async requestPasswordReset(username: string): Promise<{ filePath: string; username: string }> {
-		const response = await api.requestPasswordReset(username);
-		return {
-			filePath: response.filePath || '',
-			username: response.username || ''
-		};
+	// Returns nothing on purpose: the endpoint is unauthenticated, so it
+	// reports neither whether the username exists nor where on disk the code
+	// was written. Reading the code requires access to the server.
+	async requestPasswordReset(username: string): Promise<void> {
+		await api.requestPasswordReset(username);
 	}
 
 	async confirmPasswordReset(code: string, newPassword: string): Promise<AuthUserResponse> {

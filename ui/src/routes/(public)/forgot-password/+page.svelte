@@ -18,7 +18,7 @@
 	let submitting = $state(false);
 	let confirming = $state(false);
 	let error = $state('');
-	let resetFilePath = $state('');
+	let resetRequested = $state(false);
 	let username = $state('');
 	let enteredCode = $state('');
 	let newPassword = $state('');
@@ -34,8 +34,8 @@
 		submitting = true;
 
 		try {
-			const response = await authService.requestPasswordReset(username);
-			resetFilePath = response.filePath;
+			await authService.requestPasswordReset(username);
+			resetRequested = true;
 			submitting = false;
 		} catch (e) {
 			error = e instanceof Error ? e.message : m['errors.username_required']();
@@ -107,7 +107,7 @@
 			</div>
 		{/if}
 
-		{#if resetFilePath}
+		{#if resetRequested}
 			<!-- Show file path and code entry -->
 			<div class="space-y-6">
 				<div class="bg-accent/10 border-accent/20 rounded border p-4">
@@ -117,19 +117,9 @@
 					<p class="text-text-secondary mb-2 text-xs">
 						{m['auth.forgot_password.code_location']()}
 					</p>
-					<code
-						class="text-accent bg-surface-alt mb-3 block rounded px-3 py-2 font-mono text-sm break-all"
-					>
-						{resetFilePath}
-					</code>
 					<p class="text-text-secondary mb-2 text-xs">
 						{m['auth.forgot_password.code_view_instructions']()}
 					</p>
-					<code
-						class="text-accent bg-surface-alt block rounded px-3 py-2 font-mono text-sm break-all"
-					>
-						cat {resetFilePath}
-					</code>
 					<p class="text-text-muted mt-3 text-xs">
 						{m['auth.forgot_password.code_expires']()}
 					</p>

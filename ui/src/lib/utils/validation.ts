@@ -18,6 +18,20 @@ export const RESET_CODE_LENGTH = 8;
 // Anything below this is flagged as "short" — recommend length + password manager.
 const PASSWORD_SHORT_THRESHOLD = 12;
 
+// Mirrors library.ValidSortFields in server/internal/library/models.go. The
+// server drops sort levels it doesn't recognise, so a field listed here but
+// not there silently stops sorting.
+export type SortField = 'album-artist' | 'artist' | 'album-title' | 'year';
+export type SortDir = 'asc' | 'desc';
+export type SortLevel = { field: SortField; dir: SortDir };
+
+export const SORT_FIELDS: SortField[] = ['album-artist', 'artist', 'album-title', 'year'];
+
+export const DEFAULT_SORT: [SortLevel, SortLevel] = [
+	{ field: 'album-artist', dir: 'asc' },
+	{ field: 'year', dir: 'asc' }
+];
+
 export interface ValidationResult {
 	valid: boolean;
 	error?: string;

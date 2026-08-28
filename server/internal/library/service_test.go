@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+// testUserID is the user the mock repository grants library access to.
+// mockRepository keys libraries by user, so seeding repo.libraries[testUserID]
+// is what makes UserHasLibraryAccess return true.
+const testUserID int64 = 1
+
 // Mock repository for testing
 type mockRepository struct {
 	libraries map[int64][]*Library // userID -> libraries
@@ -274,6 +279,19 @@ func (m *mockRepository) UserHasLibraryAccess(userID, libraryID int64) (bool, er
 		}
 	}
 	return false, nil
+}
+
+func (m *mockRepository) DeleteTracksByPaths(libraryID int64, paths []string) (int64, error) {
+	var deleted int64
+	for _, p := range paths {
+		for id, t := range m.tracks {
+			if t.LibraryID == libraryID && t.FilePath == p {
+				delete(m.tracks, id)
+				deleted++
+			}
+		}
+	}
+	return deleted, nil
 }
 
 func (m *mockRepository) ListTracksByAlbum(albumID int64) ([]*Track, error) {
@@ -578,7 +596,7 @@ func TestGetScanProgress_ReturnsProgress(t *testing.T) {
 	}
 
 	// Act
-	progress, err := service.GetScanProgress(libraryID)
+	progress, err := service.GetScanProgress(testUserID, libraryID)
 
 	// Assert
 	if err != nil {
@@ -657,9 +675,10 @@ func TestGetScanProgress_NoScanInProgress(t *testing.T) {
 	repo := newMockRepository()
 	service := NewService(repo)
 	libraryID := int64(1)
+	repo.libraries[testUserID] = []*Library{{ID: libraryID, Name: "Test"}}
 
 	// Act - no scan started
-	progress, err := service.GetScanProgress(libraryID)
+	progress, err := service.GetScanProgress(testUserID, libraryID)
 
 	// Assert
 	if err != ErrNoScanInProgress {
@@ -858,6 +877,7 @@ func TestSearchLibrary(t *testing.T) {
 	service := NewService(repo)
 
 	libraryID := int64(1)
+	repo.libraries[testUserID] = []*Library{{ID: libraryID, Name: "Test"}}
 	repo.albums[1] = &Album{ID: 1, LibraryID: libraryID, Title: "Abbey Road"}
 	repo.albums[2] = &Album{ID: 2, LibraryID: libraryID, Title: "Let It Be"}
 	repo.artists[1] = &Artist{ID: 1, LibraryID: libraryID, Name: "The Beatles"}
@@ -865,7 +885,7 @@ func TestSearchLibrary(t *testing.T) {
 	repo.tracks[1] = &Track{ID: 1, LibraryID: libraryID, Title: "Come Together"}
 
 	t.Run("matches album title", func(t *testing.T) {
-		result, err := service.Search(libraryID, "abbey")
+		result, err := service.Search(testUserID, libraryID, "abbey")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -878,7 +898,7 @@ func TestSearchLibrary(t *testing.T) {
 	})
 
 	t.Run("matches artist name", func(t *testing.T) {
-		result, err := service.Search(libraryID, "beatles")
+		result, err := service.Search(testUserID, libraryID, "beatles")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -888,7 +908,7 @@ func TestSearchLibrary(t *testing.T) {
 	})
 
 	t.Run("matches track title", func(t *testing.T) {
-		result, err := service.Search(libraryID, "together")
+		result, err := service.Search(testUserID, libraryID, "together")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -898,7 +918,7 @@ func TestSearchLibrary(t *testing.T) {
 	})
 
 	t.Run("empty query returns empty result", func(t *testing.T) {
-		result, err := service.Search(libraryID, "")
+		result, err := service.Search(testUserID, libraryID, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -908,7 +928,7 @@ func TestSearchLibrary(t *testing.T) {
 	})
 
 	t.Run("no matches", func(t *testing.T) {
-		result, err := service.Search(libraryID, "xyzzy")
+		result, err := service.Search(testUserID, libraryID, "xyzzy")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -923,11 +943,12 @@ func TestListAlbumsHiResFilter(t *testing.T) {
 	service := NewService(repo)
 
 	libraryID := int64(1)
+	repo.libraries[testUserID] = []*Library{{ID: libraryID, Name: "Test"}}
 	repo.albums[1] = &Album{ID: 1, LibraryID: libraryID, Title: "Hi-Res Album", IsHiRes: true}
 	repo.albums[2] = &Album{ID: 2, LibraryID: libraryID, Title: "Standard Album", IsHiRes: false}
 
 	t.Run("without filter returns all albums", func(t *testing.T) {
-		all, err := service.ListAlbums(libraryID, ListAlbumsOptions{})
+		all, err := service.ListAlbums(testUserID, libraryID, ListAlbumsOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -937,7 +958,7 @@ func TestListAlbumsHiResFilter(t *testing.T) {
 	})
 
 	t.Run("HiResOnly returns only hi-res albums", func(t *testing.T) {
-		hiRes, err := service.ListAlbums(libraryID, ListAlbumsOptions{HiResOnly: true})
+		hiRes, err := service.ListAlbums(testUserID, libraryID, ListAlbumsOptions{HiResOnly: true})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

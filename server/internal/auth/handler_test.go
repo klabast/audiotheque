@@ -3,7 +3,7 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -98,7 +98,9 @@ func (r *fakeRepository) ListUsers() ([]*User, error) {
 
 func (r *fakeRepository) Create(username, passwordHash string, isAdmin bool) (*User, error) {
 	if _, exists := r.usersByUsername[username]; exists {
-		return nil, fmt.Errorf("username already exists")
+		// Mirrors what the SQLite driver hands back, so tests can prove the
+		// text never reaches a client.
+		return nil, errors.New("UNIQUE constraint failed: user.username")
 	}
 	id := r.nextID
 	r.nextID++
@@ -464,7 +466,7 @@ func TestHandleConfirmPasswordReset_CodeLengthValidation(t *testing.T) {
 }
 
 func TestHandleRequestPasswordReset(t *testing.T) {
-	t.Run("ok", func(t *testing.T) {
+	t.Run("known user gets an empty 204", func(t *testing.T) {
 		t.Setenv("AUDIOD_DATA_DIR", t.TempDir())
 		handler, repo := newTestHandler()
 		repo.seedUser(1, "alice", "alicepass123", false)
@@ -473,18 +475,35 @@ func TestHandleRequestPasswordReset(t *testing.T) {
 			Username: "alice",
 		})
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
 		}
-		var resp RequestPasswordResetResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		if resp.Username != "alice" {
-			t.Errorf("expected username alice, got %q", resp.Username)
+		if body := w.Body.String(); body != "" {
+			t.Errorf("expected an empty body, got %q", body)
 		}
 		if len(repo.resetCodes) != 1 {
 			t.Errorf("expected exactly one reset code to be stored, got %d", len(repo.resetCodes))
+		}
+	})
+
+	// Status codes must not tell an anonymous caller which usernames exist.
+	t.Run("unknown user is indistinguishable from a known one", func(t *testing.T) {
+		t.Setenv("AUDIOD_DATA_DIR", t.TempDir())
+		handler, repo := newTestHandler()
+		repo.seedUser(1, "alice", "alicepass123", false)
+
+		known := doJSON(t, handler.HandleRequestPasswordReset, http.MethodPost, "/api/auth/password/reset/request", RequestPasswordResetRequest{
+			Username: "alice",
+		})
+		unknown := doJSON(t, handler.HandleRequestPasswordReset, http.MethodPost, "/api/auth/password/reset/request", RequestPasswordResetRequest{
+			Username: "nosuchuser",
+		})
+
+		if known.Code != unknown.Code {
+			t.Errorf("known user got %d but unknown user got %d", known.Code, unknown.Code)
+		}
+		if known.Body.String() != unknown.Body.String() {
+			t.Errorf("bodies differ: known %q, unknown %q", known.Body.String(), unknown.Body.String())
 		}
 	})
 
@@ -520,7 +539,7 @@ func TestHandleLogout(t *testing.T) {
 		meReq := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 		meReq.AddCookie(cookie)
 		meW := httptest.NewRecorder()
-		handler.HandleMe(meW, meReq)
+		RequireUser(handler.service, handler.HandleMe)(meW, meReq)
 		if meW.Code != http.StatusUnauthorized {
 			t.Errorf("expected session to be invalidated after logout, /me returned %d", meW.Code)
 		}
@@ -548,7 +567,7 @@ func TestHandleMe(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 		req.AddCookie(cookie)
 		w := httptest.NewRecorder()
-		handler.HandleMe(w, req)
+		RequireUser(handler.service, handler.HandleMe)(w, req)
 
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -567,7 +586,7 @@ func TestHandleMe(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 		w := httptest.NewRecorder()
-		handler.HandleMe(w, req)
+		RequireUser(handler.service, handler.HandleMe)(w, req)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d", w.Code)
@@ -584,7 +603,7 @@ func TestHandleListSessions(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 		req.AddCookie(cookie)
 		w := httptest.NewRecorder()
-		handler.HandleListSessions(w, req)
+		RequireUser(handler.service, handler.HandleListSessions)(w, req)
 
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -606,7 +625,7 @@ func TestHandleListSessions(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 		w := httptest.NewRecorder()
-		handler.HandleListSessions(w, req)
+		RequireUser(handler.service, handler.HandleListSessions)(w, req)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d", w.Code)

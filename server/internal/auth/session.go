@@ -45,7 +45,10 @@ type SessionRepository interface {
 	Delete(id string) error
 	DeleteAllForUser(userID int64) error
 	DeleteAllForUserExcept(userID int64, exceptID string) error
-	ListForUser(userID int64) ([]*Session, error)
+	// ListForUser returns the user's sessions that are still valid at now.
+	// Expired rows survive until the cleanup job runs; they must never show
+	// up as an active device.
+	ListForUser(userID int64, now time.Time) ([]*Session, error)
 	DeleteExpired(now time.Time) (int64, error)
 	// SetExpiryForUser bulk-sets expires_at on every session belonging to
 	// userID. Used by the `audiod session expire-soon` CLI fixture command
@@ -138,14 +141,15 @@ func (r *sessionRepository) DeleteAllForUserExcept(userID int64, exceptID string
 	return nil
 }
 
-func (r *sessionRepository) ListForUser(userID int64) ([]*Session, error) {
+func (r *sessionRepository) ListForUser(userID int64, now time.Time) ([]*Session, error) {
 	//language=SQL
 	query := `
 SELECT id, user_id, created_at, last_seen_at, expires_at, remember_me, user_agent, last_ip
 FROM session
 WHERE user_id = ?
+  AND expires_at > ?
 ORDER BY last_seen_at DESC`
-	rows, err := r.db.Query(query, userID)
+	rows, err := r.db.Query(query, userID, now)
 	if err != nil {
 		return nil, fmt.Errorf("session list for user: %w", err)
 	}
@@ -247,10 +251,10 @@ func (m *inMemorySessionRepository) DeleteAllForUserExcept(userID int64, exceptI
 	return nil
 }
 
-func (m *inMemorySessionRepository) ListForUser(userID int64) ([]*Session, error) {
+func (m *inMemorySessionRepository) ListForUser(userID int64, now time.Time) ([]*Session, error) {
 	var sessions []*Session
 	for _, s := range m.sessions {
-		if s.UserID == userID {
+		if s.UserID == userID && s.ExpiresAt.After(now) {
 			copy := *s
 			sessions = append(sessions, &copy)
 		}

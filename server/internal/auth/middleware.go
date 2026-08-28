@@ -3,7 +3,9 @@ package auth
 import (
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -12,21 +14,38 @@ var (
 	ErrForbidden    = errors.New("forbidden: admin access required")
 )
 
-// clientIP extracts the best-effort caller IP from an HTTP request. Trusts
-// the first hop of X-Forwarded-For when present (reverse-proxy deployments),
-// falling back to r.RemoteAddr otherwise. Returned as a bare host string
-// where possible (port stripped for direct connections).
-func clientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		if comma := strings.Index(forwarded, ","); comma >= 0 {
-			return strings.TrimSpace(forwarded[:comma])
-		}
-		return strings.TrimSpace(forwarded)
+// TrustedProxyEnv marks the server as sitting behind a reverse proxy that
+// sets X-Forwarded-For / X-Forwarded-Proto. Off by default: with no proxy in
+// front those headers are attacker-controlled, and honouring them lets anyone
+// holding a stolen cookie disguise a session's origin in the Active Devices
+// list.
+const TrustedProxyEnv = "AUDIOD_TRUSTED_PROXY"
+
+func trustProxyHeaders() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(TrustedProxyEnv))) {
+	case "1", "true", "yes", "on":
+		return true
 	}
-	// r.RemoteAddr is "ip:port" for TCP; strip the port for storage parity
-	// with the X-Forwarded-For path above.
-	if colon := strings.LastIndex(r.RemoteAddr, ":"); colon > 0 {
-		return r.RemoteAddr[:colon]
+	return false
+}
+
+// clientIP extracts the caller's IP as a bare host, without a port. The single
+// implementation used both for the session row's last_ip and for renewal, so a
+// session's recorded IP keeps one format for its whole life.
+func clientIP(r *http.Request) string {
+	if trustProxyHeaders() {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			first := forwarded
+			if comma := strings.Index(forwarded, ","); comma >= 0 {
+				first = forwarded[:comma]
+			}
+			if ip := strings.TrimSpace(first); ip != "" {
+				return ip
+			}
+		}
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
 }
@@ -42,8 +61,9 @@ func clientIP(r *http.Request) string {
 // the request) and any caller that explicitly doesn't want cookie writes.
 //
 // When auth is disabled (Service.AuthEnabled() == false) the cookie is
-// ignored entirely and the canonical admin is returned — see auth-disabled
-// mode in §7 of the auth-rework roadmap.
+// ignored entirely and the canonical admin is returned. That is a listening
+// convenience only: anything that grants privilege must go through
+// AuthenticateSession / RequireRealAdmin instead.
 func GetAuthenticatedUser(r *http.Request, service *Service) (*User, error) {
 	if !service.AuthEnabled() {
 		return service.GetCanonicalAdmin()
@@ -63,16 +83,25 @@ func AuthenticateRequest(w http.ResponseWriter, r *http.Request, service *Servic
 	if !service.AuthEnabled() {
 		return service.GetCanonicalAdmin()
 	}
+	return AuthenticateSession(w, r, service)
+}
+
+// AuthenticateSession resolves the audiod_token cookie to a genuinely
+// signed-in user and refreshes the cookie. Unlike AuthenticateRequest it
+// ignores the auth-disabled toggle: turning auth off means "don't ask for a
+// password to listen to music", not "any caller on the network may
+// reprovision this server".
+func AuthenticateSession(w http.ResponseWriter, r *http.Request, service *Service) (*User, error) {
 	user, sess, err := getAuthenticatedUserAndSession(r, service)
 	if err != nil {
 		return nil, err
 	}
-	setSessionCookie(w, sess.ID, sess.RememberMe)
+	setSessionCookie(w, r, sess.ID, sess.RememberMe)
 	return user, nil
 }
 
 func getAuthenticatedUserAndSession(r *http.Request, service *Service) (*User, *Session, error) {
-	cookie, err := r.Cookie("audiod_token")
+	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		return nil, nil, ErrUnauthorized
 	}
@@ -97,4 +126,86 @@ func RequireAdmin(user *User) error {
 		return ErrForbidden
 	}
 	return nil
+}
+
+// RequireRealAdmin resolves a genuinely signed-in admin from the request,
+// regardless of the auth-disabled toggle. Every privilege-granting surface
+// (user management, password change/reset, session revocation) goes through
+// this rather than RequireAdmin-on-AuthenticateRequest.
+func RequireRealAdmin(w http.ResponseWriter, r *http.Request, service *Service) (*User, error) {
+	user, err := AuthenticateSession(w, r, service)
+	if err != nil {
+		return nil, err
+	}
+	if err := RequireAdmin(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// AuthedHandlerFunc is an HTTP handler that only ever runs with a resolved
+// user, so it never has to deal with the unauthenticated case itself.
+type AuthedHandlerFunc func(w http.ResponseWriter, r *http.Request, user *User)
+
+// RequireUser adapts an AuthedHandlerFunc into an http.HandlerFunc, rejecting
+// the request before next runs if no valid session is present.
+//
+// Route registration is the only place authentication is decided. Handlers
+// that authenticate themselves make protection a thing you have to remember,
+// and six library read routes shipped without it.
+func RequireUser(service *Service, next AuthedHandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, err := AuthenticateRequest(w, r, service)
+		if err != nil {
+			WriteAuthError(w, err)
+			return
+		}
+		next(w, r, user)
+	}
+}
+
+// RequireAdminUser is RequireUser plus an admin check.
+func RequireAdminUser(service *Service, next AuthedHandlerFunc) http.HandlerFunc {
+	return RequireUser(service, func(w http.ResponseWriter, r *http.Request, user *User) {
+		if err := RequireAdmin(user); err != nil {
+			WriteAuthError(w, err)
+			return
+		}
+		next(w, r, user)
+	})
+}
+
+// RequireRealUser demands a real signed-in session even when auth is
+// disabled. Use it for anything acting on credentials or sessions.
+func RequireRealUser(service *Service, next AuthedHandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, err := AuthenticateSession(w, r, service)
+		if err != nil {
+			WriteAuthError(w, err)
+			return
+		}
+		next(w, r, user)
+	}
+}
+
+// RequireRealAdminUser is RequireRealUser plus an admin check — the
+// route-registration form of RequireRealAdmin.
+func RequireRealAdminUser(service *Service, next AuthedHandlerFunc) http.HandlerFunc {
+	return RequireRealUser(service, func(w http.ResponseWriter, r *http.Request, user *User) {
+		if err := RequireAdmin(user); err != nil {
+			WriteAuthError(w, err)
+			return
+		}
+		next(w, r, user)
+	})
+}
+
+// WriteAuthError maps an authentication or authorization error onto a response
+// with a generic message, so internal error text never reaches the client.
+func WriteAuthError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrForbidden) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import { Alert, Button, Input, Label } from '$lib/components/ui';
 	import LibraryPathsEditor from './LibraryPathsEditor.svelte';
 
@@ -28,12 +29,12 @@
 		const filteredPaths = libraryPaths.filter((p) => p.trim() !== '');
 
 		if (!trimmedName) {
-			formError = 'Library name is required';
+			formError = m['errors.library_name_required']();
 			return;
 		}
 
 		if (filteredPaths.length === 0) {
-			formError = 'At least one path is required';
+			formError = m['errors.library_paths_required']();
 			return;
 		}
 

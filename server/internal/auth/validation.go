@@ -1,6 +1,24 @@
 package auth
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ValidationError marks a credential-format rejection. The message is our own
+// text (never a driver's), so a handler may return it to the client as-is.
+type ValidationError struct{ msg string }
+
+func (e *ValidationError) Error() string { return e.msg }
+
+func validationErrorf(format string, args ...any) error {
+	return &ValidationError{msg: fmt.Sprintf(format, args...)}
+}
+
+func isValidationError(err error) bool {
+	var v *ValidationError
+	return errors.As(err, &v)
+}
 
 // Credential validation rules, shared by every handler that accepts a
 // username, password, or reset code (login, setup, password change/reset,
@@ -26,7 +44,7 @@ const (
 // ValidatePassword checks a candidate password against the length policy.
 func ValidatePassword(password string) error {
 	if len(password) < MinPasswordLength || len(password) > MaxPasswordLength {
-		return fmt.Errorf("password must be between %d and %d characters", MinPasswordLength, MaxPasswordLength)
+		return validationErrorf("password must be between %d and %d characters", MinPasswordLength, MaxPasswordLength)
 	}
 	return nil
 }
@@ -34,7 +52,7 @@ func ValidatePassword(password string) error {
 // ValidateUsername checks a candidate username against the length policy.
 func ValidateUsername(username string) error {
 	if len(username) < MinUsernameLength || len(username) > MaxUsernameLength {
-		return fmt.Errorf("username must be between %d and %d characters", MinUsernameLength, MaxUsernameLength)
+		return validationErrorf("username must be between %d and %d characters", MinUsernameLength, MaxUsernameLength)
 	}
 	return nil
 }
@@ -43,7 +61,7 @@ func ValidateUsername(username string) error {
 // expected fixed length.
 func ValidateResetCode(code string) error {
 	if len(code) != ResetCodeLength {
-		return fmt.Errorf("reset code must be %d characters", ResetCodeLength)
+		return validationErrorf("reset code must be %d characters", ResetCodeLength)
 	}
 	return nil
 }

@@ -87,7 +87,7 @@ type mockTrackProvider struct {
 	tracks []Track
 }
 
-func (m *mockTrackProvider) GetAlbumTracks(albumID int64) ([]Track, error) {
+func (m *mockTrackProvider) GetAlbumTracks(_, albumID int64) ([]Track, error) {
 	var result []Track
 	for _, t := range m.tracks {
 		if t.AlbumID == albumID {

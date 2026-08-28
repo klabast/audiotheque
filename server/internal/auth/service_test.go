@@ -297,11 +297,14 @@ func TestUpdatePassword_ValidCurrentPassword_UpdatesPassword(t *testing.T) {
 	service := NewService(repo, NewInMemorySessionRepository())
 
 	// Act: Update password
-	err = service.UpdatePassword(1, "oldpassword", "newpassword")
+	sessionID, err := service.UpdatePassword(1, "oldpassword", "newpassword", SessionContext{})
 
-	// Assert: Should succeed and update password hash
+	// Assert: Should succeed, update the hash, and hand back a fresh session
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+	if sessionID == "" {
+		t.Error("expected a replacement session for the caller, got an empty id")
 	}
 
 	// Verify new password works for login

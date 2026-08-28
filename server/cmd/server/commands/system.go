@@ -4,6 +4,7 @@ import (
 	"audiod/internal/branding"
 	"audiod/internal/cli"
 	"audiod/internal/config"
+	"audiod/internal/settings"
 	"audiod/internal/system"
 	"fmt"
 	"os"
@@ -78,8 +79,60 @@ Examples:
 	},
 }
 
+// systemAuthCmd is the recovery path for auth-disabled mode. Turning login off
+// and then losing the browser session leaves nobody holding a real admin
+// session, and the HTTP toggle deliberately requires one — so re-enabling has
+// to be reachable from the shell on the box.
+var systemAuthCmd = &cobra.Command{
+	Use:   "auth [on|off]",
+	Short: "Show or set whether browser login is required",
+	Long: `Show or set whether browser login is required.
+
+With no argument, prints the current setting. This is the recovery path when
+login has been disabled and no admin session is available to turn it back on.
+
+Examples:
+  audiod system auth      # show current setting
+  audiod system auth on   # require login
+  audiod system auth off  # disable login`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		service := settings.NewService(settings.NewRepository(db))
+
+		if len(args) == 0 {
+			enabled, err := service.IsAuthEnabled()
+			if err != nil {
+				return fmt.Errorf("failed to read auth setting: %w", err)
+			}
+			fmt.Printf("Login required: %t\n", enabled)
+			return nil
+		}
+
+		var enabled bool
+		switch args[0] {
+		case "on", "true", "enabled":
+			enabled = true
+		case "off", "false", "disabled":
+			enabled = false
+		default:
+			return fmt.Errorf("invalid value %q: use \"on\" or \"off\"", args[0])
+		}
+
+		if err := service.SetAuthEnabled(enabled); err != nil {
+			return fmt.Errorf("failed to save auth setting: %w", err)
+		}
+		if enabled {
+			fmt.Println("✓ Login is now required")
+		} else {
+			fmt.Println("✓ Login is now disabled")
+		}
+		return nil
+	},
+}
+
 func init() {
 	systemCmd.AddCommand(systemResetCmd)
+	systemCmd.AddCommand(systemAuthCmd)
 
 	// Flags for system reset
 	systemResetCmd.Flags().Bool("confirm", false, "Skip confirmation prompt (use with caution)")

@@ -77,16 +77,28 @@ func (m *mockPlaybackDevice) SupportsVolume() bool {
 	return m.setVolumeErr == nil || !errors.Is(m.setVolumeErr, ErrVolumeNotSupported)
 }
 
-// mockDeviceResolver maps device IDs to mock devices for testing
+// mockDeviceResolver maps device IDs to mock devices for testing. errs lets a
+// test make a known device fail to resolve (e.g. ErrDeviceUnreachable for an
+// MPD box that is rebooting); browsers marks IDs the resolver considers
+// browser tabs, mirroring RegistryDeviceResolver.IsBrowserDevice.
 type mockDeviceResolver struct {
-	devices map[string]PlaybackDevice
+	devices  map[string]PlaybackDevice
+	errs     map[string]error
+	browsers map[string]bool
 }
 
 func (m *mockDeviceResolver) ResolveDevice(deviceID string) (PlaybackDevice, error) {
+	if err, ok := m.errs[deviceID]; ok {
+		return nil, err
+	}
 	if d, ok := m.devices[deviceID]; ok {
 		return d, nil
 	}
 	return nil, ErrDeviceNotFound
+}
+
+func (m *mockDeviceResolver) IsBrowserDevice(deviceID string) bool {
+	return m.browsers[deviceID]
 }
 
 // TDD: Playing an album with a device ID sends play command to that device

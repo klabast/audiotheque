@@ -245,6 +245,40 @@ func (r *repository) GetTrackPathsForLibrary(libraryID int64) (map[string]time.T
 	return result, rows.Err()
 }
 
+// deleteTracksBatch is how many paths go into one DELETE. SQLite's default
+// bound-parameter limit is 999, so a library that lost thousands of files still
+// has to be removed in chunks.
+const deleteTracksBatch = 500
+
+// DeleteTracksByPaths removes tracks by absolute file path. The FTS index is
+// maintained by the track_ad trigger, so no separate cleanup is needed.
+func (r *repository) DeleteTracksByPaths(libraryID int64, paths []string) (int64, error) {
+	var deleted int64
+	for start := 0; start < len(paths); start += deleteTracksBatch {
+		end := min(start+deleteTracksBatch, len(paths))
+		chunk := paths[start:end]
+
+		args := make([]interface{}, 0, len(chunk)+1)
+		args = append(args, libraryID)
+		for _, p := range chunk {
+			args = append(args, p)
+		}
+
+		//language=SQL
+		query := `DELETE FROM track WHERE library_id = ? AND file_path IN (` + placeholders(len(chunk)) + `)`
+		result, err := r.db.Exec(query, args...)
+		if err != nil {
+			return deleted, err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return deleted, err
+		}
+		deleted += n
+	}
+	return deleted, nil
+}
+
 // =============================================================================
 // Track-Artist relationship methods
 // =============================================================================

@@ -4,6 +4,7 @@ import (
 	"audiod/internal/auth"
 	"audiod/internal/cli"
 	"audiod/internal/library"
+	"errors"
 	"fmt"
 	"time"
 
@@ -200,7 +201,7 @@ Examples:
 		// Authenticate user
 		authRepo := auth.NewRepository(db)
 		authService := auth.NewService(authRepo, nil)
-		_, err := authService.Authenticate(username, password)
+		user, err := authService.Authenticate(username, password)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
@@ -229,18 +230,18 @@ Examples:
 
 		// Follow progress if requested
 		if follow {
-			return followScanProgress(service, id)
+			return followScanProgress(service, user.ID, id)
 		}
 
 		return nil
 	},
 }
 
-func followScanProgress(service *library.Service, libraryID int64) error {
+func followScanProgress(service *library.Service, userID, libraryID int64) error {
 	fmt.Println("\nScanning...")
 	for {
-		progress, err := service.GetScanProgress(libraryID)
-		if err == library.ErrNoScanInProgress {
+		progress, err := service.GetScanProgress(userID, libraryID)
+		if errors.Is(err, library.ErrNoScanInProgress) {
 			fmt.Println("\n✓ Scan completed")
 			return nil
 		}

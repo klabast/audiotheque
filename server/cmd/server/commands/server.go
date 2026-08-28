@@ -70,6 +70,13 @@ func startServer() error {
 	}
 	defer db.Close()
 
+	// Resolve (and on first run generate) the stream-token signing secret now.
+	// Left to its first use it would resolve inside a live request, where a
+	// disk problem surfaces as a failed stream instead of a failed boot.
+	if err := auth.EnsureJWTSecret(); err != nil {
+		return fmt.Errorf("failed to resolve JWT secret: %w", err)
+	}
+
 	// Initialize auth (with DB-backed session store for browser sessions).
 	// Variable name is "authSessionRepo" to disambiguate from the playback
 	// SessionRepository defined further down — they're separate concerns.
@@ -115,6 +122,10 @@ func startServer() error {
 
 	// Register auth domain jobs
 	scheduler.Register(auth.NewResetCodeCleanupJob(authService))
+	// Expiry is enforced per-request, but a row is only removed when that exact
+	// cookie comes back — which an abandoned session never does. Without this
+	// every browser that ever logged in leaves a row behind for good.
+	scheduler.Register(auth.NewSessionCleanupJob(authService))
 
 	// Start background jobs
 	scheduler.Start()
@@ -162,23 +173,13 @@ func startServer() error {
 	// Wire WS broadcaster: every session mutation pushes to user's clients.
 	// exceptClientID lets us skip the originating client (e.g. the browser
 	// that just sent its position tick) so it doesn't get its own value back.
-	// The broadcaster reuses the same capabilitiesFn shape as the HTTP
-	// handler so push-broadcasts and REST responses surface the same hint.
-	wsCaps := func(deviceID string) *playback.DeviceCapabilities {
-		device, err := prodResolver.ResolveDevice(deviceID)
-		if err != nil {
-			return nil
-		}
-		caps := &playback.DeviceCapabilities{Volume: true}
-		if cap, ok := device.(interface{ SupportsVolume() bool }); ok {
-			caps.Volume = cap.SupportsVolume()
-		}
-		return caps
-	}
+	// Capabilities come from the service so a WS push and a REST response can
+	// never disagree about the same device — this used to be a second,
+	// subtly different probe that defaulted Volume the other way.
 	playbackService.SetBroadcaster(playback.SessionBroadcasterFunc(func(userID int64, session *playback.Session, exceptClientID string) {
 		msg := websocket.Message{
 			Type: "playback-session",
-			Data: playback.SessionToResponse(session, wsCaps),
+			Data: playback.SessionToResponse(session, playbackService.DeviceCapabilities),
 		}
 		if err := hub.BroadcastToUserExcept(userID, exceptClientID, msg); err != nil {
 			logger.Error("broadcast session failed", "userID", userID, "error", err)
@@ -256,7 +257,6 @@ func startServer() error {
 	playbackHandler.SetTrackStore(libraryRepo)
 	playbackHandler.SetDeviceRegistry(deviceRegistry)
 	playbackHandler.SetBrowserRegistry(browserRegistry)
-	playbackHandler.SetDeviceResolver(prodResolver)
 	// Accept ?token= as a fallback when cookie auth fails — the path used by
 	// MPD devices fetching signed stream URLs.
 	playbackHandler.SetStreamTokenValidator(auth.ValidateStreamToken)

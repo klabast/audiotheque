@@ -9,7 +9,7 @@ import (
 
 // TrackProvider provides access to tracks (from library)
 type TrackProvider interface {
-	GetAlbumTracks(albumID int64) ([]Track, error)
+	GetAlbumTracks(userID, albumID int64) ([]Track, error)
 }
 
 // SessionRepository handles session persistence. There is at most one
@@ -29,6 +29,10 @@ type SessionRepository interface {
 // ErrNoDevice signals that an operation requires an active playback device
 // but the session doesn't name one. The handler maps this to 409 Conflict.
 var ErrNoDevice = errors.New("no playback device assigned to session")
+
+// ErrNoSession signals that the user has no active playback session. The
+// handler maps this to 404 Not Found.
+var ErrNoSession = errors.New("no active session")
 
 // DeviceResolver resolves a device ID to a PlaybackDevice. Empty deviceID is
 // not a valid input under the unified-device invariant — callers must
@@ -51,10 +55,31 @@ type Service struct {
 	broadcaster    SessionBroadcaster
 	logger         *slog.Logger
 
-	// activeMPDUsers tracks which users currently have a playing session on
-	// an MPD device. The poller reads this; request handlers write to it via
+	// mpdUsers tracks which users currently have a playing session on an MPD
+	// device. The poller reads this; request handlers write to it via
 	// trackMPDState in persistAndBroadcast.
-	activeMPDUsers sync.Map // userID -> activeMPDSession
+	mpdUsers mpdTracker
+
+	// userLocks serializes each user's session read-modify-write. Every
+	// service entry point takes its user's lock and holds it across the whole
+	// read → mutate → save, device round trip included: three writers (the 1 Hz
+	// poller, one readPump per browser tab, HTTP handlers) otherwise interleave
+	// and drop each other's updates.
+	//
+	// Lock ordering is always user lock → device lock. Device commands never
+	// call back into the service, so the reverse edge doesn't exist and the
+	// ordering cannot cycle. Holding the lock across MPD I/O means one user's
+	// requests queue behind their own device; the bound comes from
+	// MPDPlaybackDevice's command timeout.
+	userLocks sync.Map // userID -> *sync.Mutex
+}
+
+// lockUser acquires the user's session lock and returns its release function.
+func (s *Service) lockUser(userID int64) func() {
+	v, _ := s.userLocks.LoadOrStore(userID, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 // NewService creates a new playback service
@@ -116,7 +141,15 @@ func (s *Service) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceI
 	if deviceID == "" {
 		return nil, ErrNoDevice
 	}
-	tracks, err := s.tracks.GetAlbumTracks(albumID)
+	unlock := s.lockUser(userID)
+	defer unlock()
+
+	previous, err := s.sessions.GetByUserID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	tracks, err := s.tracks.GetAlbumTracks(userID, albumID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get album tracks: %w", err)
 	}
@@ -171,11 +204,39 @@ func (s *Service) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceI
 		return nil, fmt.Errorf("play on device: %w", err)
 	}
 
+	// Only one device may hold the session, so the one it just left has to be
+	// told to stop — otherwise both keep playing and the old one, no longer
+	// named by any session, can never be reached again. Stopping after the new
+	// device accepted the play keeps a failed play from silencing everything.
+	s.stopPreviousDevice(previous, deviceID)
+
 	if err := s.persistAndBroadcast(session); err != nil {
 		return nil, err
 	}
 
 	return session, nil
+}
+
+// stopPreviousDevice stops the device the session was playing on when playback
+// moves elsewhere. Best-effort: the old device may have disconnected, which is
+// exactly the case where there is nothing left to stop.
+func (s *Service) stopPreviousDevice(previous *Session, newDeviceID string) {
+	if previous == nil || previous.DeviceID == "" || previous.DeviceID == newDeviceID {
+		return
+	}
+	if previous.State != StatePlaying && previous.State != StatePaused {
+		return
+	}
+	device, err := s.resolveDevice(previous.DeviceID)
+	if err != nil {
+		s.logger.Warn("resolve previous device to stop it failed",
+			"deviceID", previous.DeviceID, "error", err)
+		return
+	}
+	if err := device.Stop(); err != nil {
+		s.logger.Warn("stop previous device failed",
+			"deviceID", previous.DeviceID, "error", err)
+	}
 }
 
 // GetSession retrieves a user's current playback session. If the session is
@@ -186,6 +247,9 @@ func (s *Service) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceI
 // (nil, nil), same as a user who never started playback. They can press
 // play on any client to create a fresh session bound to that client.
 func (s *Service) GetSession(userID int64) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil || session == nil {
 		return session, err
@@ -193,23 +257,38 @@ func (s *Service) GetSession(userID int64) (*Session, error) {
 	if session.DeviceID == "" {
 		// Pre-invariant row that survived migration somehow. Treat as orphan.
 		s.logger.Debug("deleting session with empty deviceID", "userID", userID)
-		if err := s.sessions.Delete(userID); err != nil {
-			s.logger.Warn("delete empty-device session failed", "userID", userID, "error", err)
-		}
+		s.deleteOrphan(userID)
 		return nil, nil
 	}
 	if s.deviceResolver == nil {
 		return session, nil
 	}
 	if _, err := s.deviceResolver.ResolveDevice(session.DeviceID); err != nil {
-		s.logger.Debug("deleting session whose device disappeared",
-			"userID", userID, "deviceID", session.DeviceID, "error", err)
-		if err := s.sessions.Delete(userID); err != nil {
-			s.logger.Warn("delete orphaned session failed", "userID", userID, "error", err)
+		// Only a device that is genuinely gone orphans the session. A refused
+		// dial, a timeout, an MPD box mid-reboot — those are transient, and
+		// deleting on them costs the user their queue, position and history
+		// on the next page load.
+		if !errors.Is(err, ErrDeviceNotFound) {
+			s.logger.Warn("session device is unreachable; keeping the session",
+				"userID", userID, "deviceID", session.DeviceID, "error", err)
+			return session, nil
 		}
+		s.logger.Info("deleting session whose device disappeared",
+			"userID", userID, "deviceID", session.DeviceID, "error", err)
+		s.deleteOrphan(userID)
 		return nil, nil
 	}
 	return session, nil
+}
+
+// deleteOrphan removes a session with no addressable owner, poller bookkeeping
+// included — a leftover entry keeps the poller resolving a dead device once a
+// second forever.
+func (s *Service) deleteOrphan(userID int64) {
+	s.mpdUsers.delete(userID)
+	if err := s.sessions.Delete(userID); err != nil {
+		s.logger.Warn("delete orphaned session failed", "userID", userID, "error", err)
+	}
 }
 
 // Pause pauses playback and saves the current position. If the session is
@@ -217,12 +296,15 @@ func (s *Service) GetSession(userID int64) (*Session, error) {
 // returned and the session is NOT persisted as paused — clients must see the
 // real device state, not an optimistic lie.
 func (s *Service) Pause(userID int64, position int) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	device, err := s.resolveDevice(session.DeviceID)
@@ -249,12 +331,15 @@ func (s *Service) Pause(userID int64, position int) (*Session, error) {
 // failures abort the resume so the persisted state never disagrees with what
 // the device is actually doing.
 func (s *Service) Resume(userID int64) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	device, err := s.resolveDevice(session.DeviceID)
@@ -277,12 +362,19 @@ func (s *Service) Resume(userID int64) (*Session, error) {
 // Next advances to the next track
 // Priority: explicit queue first, then source remaining
 func (s *Service) Next(userID int64) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+	return s.nextLocked(userID)
+}
+
+// nextLocked implements Next; callers must hold the user's session lock.
+func (s *Service) nextLocked(userID int64) (*Session, error) {
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	// Add current track to history (if exists)
@@ -307,17 +399,18 @@ func (s *Service) Next(userID int64) (*Session, error) {
 			Position: 0,
 		}
 	} else {
-		// No more tracks - stop playback
+		// No more tracks - stop playback. The device has to be told: setting
+		// state=stopped on our side alone leaves MPD happily playing on.
 		session.State = StateStopped
 		session.Current = nil
+		s.stopDevice(session.DeviceID)
 	}
 
 	// Forward to device when there's still a track to play and the session
-	// is in playing state. Device failure aborts so we don't persist a "now
-	// playing" track the device never started.
+	// is in playing state.
 	if session.Current != nil && session.State == StatePlaying {
 		if err := s.playOnDevice(session); err != nil {
-			return nil, fmt.Errorf("play next on device: %w", err)
+			return nil, s.persistFailedAdvance(session, "next", err)
 		}
 	}
 
@@ -328,15 +421,52 @@ func (s *Service) Next(userID int64) (*Session, error) {
 	return session, nil
 }
 
+// stopDevice tells the session's device to stop. Best-effort — a device we
+// can't reach has nothing we can do about it.
+func (s *Service) stopDevice(deviceID string) {
+	if deviceID == "" {
+		return
+	}
+	device, err := s.resolveDevice(deviceID)
+	if err != nil {
+		s.logger.Warn("resolve device to stop it failed", "deviceID", deviceID, "error", err)
+		return
+	}
+	if err := device.Stop(); err != nil {
+		s.logger.Warn("stop device failed", "deviceID", deviceID, "error", err)
+	}
+}
+
+// persistFailedAdvance saves the track change the device refused, marked
+// paused, and returns the wrapped error. Returning without persisting is what
+// wedged playback: the poller pre-clears observedPlay before calling Next, so
+// a session left at the old track with state=playing never advanced again —
+// every later tick read "stop without prior play" and skipped. Persisting a
+// paused session at the new track drops the poller entry (trackMPDState) and
+// leaves the user one press of play away from recovering.
+func (s *Service) persistFailedAdvance(session *Session, op string, cause error) error {
+	s.logger.Warn("device refused the track change; parking the session as paused",
+		"userID", session.UserID, "deviceID", session.DeviceID, "op", op, "error", cause)
+	session.State = StatePaused
+	if err := s.persistAndBroadcast(session); err != nil {
+		s.logger.Error("persist after failed track change failed",
+			"userID", session.UserID, "error", err)
+	}
+	return fmt.Errorf("play %s on device: %w", op, cause)
+}
+
 // Previous goes back to the previous track
 // If no history, restarts current track
 func (s *Service) Previous(userID int64) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	if len(session.History) > 0 {
@@ -360,10 +490,13 @@ func (s *Service) Previous(userID int64) (*Session, error) {
 		}
 	}
 
-	// Forward to device when there's a current track. Device failure aborts.
-	if session.Current != nil {
+	// Forward to device only when the session is actually playing — same
+	// guard as Next. Starting the device on a paused session left the two
+	// disagreeing, and the poller ignores non-playing sessions, so the
+	// position then never moved.
+	if session.Current != nil && session.State == StatePlaying {
 		if err := s.playOnDevice(session); err != nil {
-			return nil, fmt.Errorf("play previous on device: %w", err)
+			return nil, s.persistFailedAdvance(session, "previous", err)
 		}
 	}
 
@@ -380,12 +513,15 @@ func (s *Service) Previous(userID int64) (*Session, error) {
 // vet -stdmethods` flags any method called `Seek` whose first two args are
 // `(int64, int)` because that almost-but-not-quite matches io.Seeker.
 func (s *Service) SeekTrack(userID int64, position int) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	device, err := s.resolveDevice(session.DeviceID)
@@ -410,12 +546,15 @@ func (s *Service) SeekTrack(userID int64, position int) (*Session, error) {
 // SetVolume sets the playback volume (0-100) and stores it per-device. Device
 // failures abort so the per-device map and the actual hardware don't diverge.
 func (s *Service) SetVolume(userID int64, volume int) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	device, err := s.resolveDevice(session.DeviceID)
@@ -452,7 +591,9 @@ func (s *Service) SetVolume(userID int64, volume int) (*Session, error) {
 // where the device itself is authoritative for elapsed time and the value
 // can legitimately drop (track transitions, device-driven seeks).
 func (s *Service) UpdatePosition(userID int64, position int) {
-	s.updatePosition(userID, position, "", false)
+	unlock := s.lockUser(userID)
+	defer unlock()
+	s.updatePositionLocked(userID, position, "", false)
 }
 
 // UpdatePositionFromClient is the client-driven counterpart: a browser tab
@@ -461,10 +602,14 @@ func (s *Service) UpdatePosition(userID int64, position int) {
 // stale `timeupdate` events racing with a server-driven seek and would
 // clobber the seeked position with a pre-broadcast localCurrentTime.
 func (s *Service) UpdatePositionFromClient(userID int64, position int, senderClientID string) {
-	s.updatePosition(userID, position, senderClientID, true)
+	unlock := s.lockUser(userID)
+	defer unlock()
+	s.updatePositionLocked(userID, position, senderClientID, true)
 }
 
-func (s *Service) updatePosition(userID int64, position int, exceptClientID string, fromClient bool) {
+// updatePositionLocked implements both position paths; callers must hold the
+// user's session lock.
+func (s *Service) updatePositionLocked(userID int64, position int, exceptClientID string, fromClient bool) {
 	session, err := s.sessions.GetByUserID(userID)
 	if err != nil || session == nil || session.Current == nil {
 		return
@@ -486,6 +631,9 @@ func (s *Service) updatePosition(userID int64, position int, exceptClientID stri
 // volume if known. targetDeviceID must name a real device — the unified
 // invariant rules out "transfer to nothing."
 func (s *Service) TransferPlayback(userID int64, targetDeviceID string) (*Session, error) {
+	unlock := s.lockUser(userID)
+	defer unlock()
+
 	if targetDeviceID == "" {
 		return nil, ErrNoDevice
 	}
@@ -494,7 +642,7 @@ func (s *Service) TransferPlayback(userID int64, targetDeviceID string) (*Sessio
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, ErrNoSession
 	}
 
 	if session.DeviceVolumes == nil {
@@ -509,7 +657,7 @@ func (s *Service) TransferPlayback(userID int64, targetDeviceID string) (*Sessio
 	// persistAndBroadcast at the end of this function, mistake it for
 	// end-of-track, and call Next() — which races the transfer and resets
 	// session.position to 0.
-	s.activeMPDUsers.Delete(userID)
+	s.mpdUsers.delete(userID)
 
 	if oldDevice, err := s.resolveDevice(session.DeviceID); err != nil {
 		s.logger.Error("resolve old device failed for transfer", "deviceID", session.DeviceID, "error", err)
@@ -536,8 +684,14 @@ func (s *Service) TransferPlayback(userID int64, targetDeviceID string) (*Sessio
 	// where the UI thinks playback moved but no audio is happening.
 	if session.Current != nil && session.State == StatePlaying {
 		if err := s.playOnDevice(session); err != nil {
-			session.DeviceID = oldDeviceID
-			return nil, fmt.Errorf("transfer failed: %w", err)
+			return nil, s.rollbackTransfer(session, oldDeviceID, err)
+		}
+	} else {
+		// Nothing to start, but the target still has to exist: without this
+		// check a paused session would be bound to any string the caller sent
+		// and transferring to an offline device answered 200.
+		if _, err := s.resolveDevice(targetDeviceID); err != nil {
+			return nil, s.rollbackTransfer(session, oldDeviceID, err)
 		}
 	}
 
@@ -563,6 +717,39 @@ func (s *Service) TransferPlayback(userID int64, targetDeviceID string) (*Sessio
 	}
 
 	return session, nil
+}
+
+// DeviceCapabilities reports what the named device can do, for the
+// deviceCapabilities hint on SessionResponse. Returns nil when the device
+// can't be resolved so the hint is omitted rather than guessed.
+func (s *Service) DeviceCapabilities(deviceID string) *DeviceCapabilities {
+	device, err := s.resolveDevice(deviceID)
+	if err != nil {
+		return nil
+	}
+	return &DeviceCapabilities{Volume: device.SupportsVolume()}
+}
+
+// rollbackTransfer puts the session back on the device it came from after a
+// failed transfer. The old device was already stopped and its poller entry
+// deleted, so restoring DeviceID alone leaves playback dead on both ends:
+// restart it, and persist so trackMPDState re-seeds the poller. If the old
+// device won't start either, park the session as paused rather than claiming
+// to play on a device that isn't.
+func (s *Service) rollbackTransfer(session *Session, oldDeviceID string, cause error) error {
+	session.DeviceID = oldDeviceID
+	if session.Current != nil && session.State == StatePlaying {
+		if err := s.playOnDevice(session); err != nil {
+			s.logger.Warn("restart of the old device after a failed transfer failed",
+				"deviceID", oldDeviceID, "error", err)
+			session.State = StatePaused
+		}
+	}
+	if err := s.persistAndBroadcast(session); err != nil {
+		s.logger.Error("persist after failed transfer failed",
+			"userID", session.UserID, "error", err)
+	}
+	return fmt.Errorf("transfer failed: %w", cause)
 }
 
 // resolveDevice resolves a device ID to a PlaybackDevice
