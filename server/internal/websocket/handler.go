@@ -57,7 +57,6 @@ func NewHandler(hub *Hub) *Handler {
 	}
 }
 
-// SetUserIDGetter sets the function used to extract user ID from requests
 func (h *Handler) SetUserIDGetter(getter UserIDGetter) {
 	h.getUserID = getter
 }

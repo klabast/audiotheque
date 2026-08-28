@@ -91,22 +91,18 @@ func NewService(tracks TrackProvider, sessions SessionRepository) *Service {
 	}
 }
 
-// SetLogger sets the structured logger for the service
 func (s *Service) SetLogger(logger *slog.Logger) {
 	s.logger = logger
 }
 
-// SetDeviceResolver sets the device resolver for device-aware playback
 func (s *Service) SetDeviceResolver(resolver DeviceResolver) {
 	s.deviceResolver = resolver
 }
 
-// SetStreamURLBuilder sets the function used to build track stream URLs
 func (s *Service) SetStreamURLBuilder(builder StreamURLBuilder) {
 	s.streamURL = builder
 }
 
-// SetBroadcaster sets the broadcaster used to push session changes to clients.
 func (s *Service) SetBroadcaster(b SessionBroadcaster) {
 	s.broadcaster = b
 }
@@ -196,10 +192,9 @@ func (s *Service) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceI
 	}
 
 	// Forward to device BEFORE persisting so we don't broadcast a "playing"
-	// state that the device hasn't been asked to honor yet. If the device
-	// rejects the play, surface that error to the caller — silently flipping
-	// to "this device" was the bug that masked simultaneous browser+MPD
-	// playback when MPD was unreachable.
+	// state that the device hasn't been asked to honor yet. A device that
+	// refuses the play must surface that to the caller: treating it as
+	// success leaves the session naming a device that isn't playing.
 	if err := s.playOnDevice(session); err != nil {
 		return nil, fmt.Errorf("play on device: %w", err)
 	}
