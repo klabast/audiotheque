@@ -10,7 +10,7 @@
 # `cd ui && npm run generate-api` (CI does this before `docker build`).
 # Both are gitignored — the Dockerfile expects them in the build context.
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
