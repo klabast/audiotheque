@@ -276,9 +276,7 @@ func (h *Hub) SetLifecycleHandlers(onReg, onUnreg LifecycleHandler) {
 }
 
 // SendToClient sends a message to a single client identified by clientID. It
-// is a no-op (returns nil) if no matching client is connected. Used to push
-// targeted messages such as the per-connection client-id welcome and
-// transfer-target handoffs.
+// is a no-op (returns nil) if no matching client is connected.
 func (h *Hub) SendToClient(clientID string, msg Message) error {
 	if clientID == "" {
 		return nil
@@ -429,10 +427,10 @@ const browserClientIDPrefix = "b-"
 // ServeWs handles WebSocket requests from clients. requestedID is the
 // client-supplied stable identifier (from sessionStorage, sent as a query
 // param on the WS URL) that lets a browser tab survive a network change
-// (e.g. LAN→WLAN) without losing its playback session — the old hub-assigned
-// "c<n>" ID was a fresh, unpredictable value on every reconnect. If
-// requestedID isn't a valid UUID (absent, malformed, or from an older
-// client build), we fall back to the old monotonic counter.
+// (e.g. LAN→WLAN) without losing its playback session: a hub-assigned "c<n>"
+// ID is a fresh, unpredictable value on every reconnect. If requestedID isn't
+// a valid UUID (absent, malformed, or from an older client build), the
+// hub-assigned counter is used instead.
 func ServeWs(hub *Hub, conn *websocket.Conn, userID int64, userAgent string, requestedID string) {
 	id := fmt.Sprintf("c%d", hub.nextClientID.Add(1))
 	if clientUUIDPattern.MatchString(requestedID) {
