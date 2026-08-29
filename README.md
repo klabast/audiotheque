@@ -70,6 +70,7 @@ That's the pitch.
 - **Discovery** — mDNS for MPD speakers on the LAN.
 - **Auth** — HttpOnly cookies + Argon2id; signed short-TTL JWTs for MPD stream URLs.
 - **CI/CD** — Dave Farley-style pipeline: commit → image → acceptance → promote.
+  Trunk-based; pull requests run acceptance, so `main` stays releasable.
 
 ## Install
 

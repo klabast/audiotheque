@@ -42,11 +42,28 @@ docker build \
 
 ### GitHub Actions
 
-Our CI/CD pipeline:
-1. Builds and caches base images weekly (or on manual trigger)
-2. Runs tests with FFmpeg installed
-3. Builds multi-architecture images (amd64, arm64)
-4. Pushes images to GitHub Container Registry
+Our CI/CD pipeline (`.github/workflows/ci.yml`) is a Dave Farley-style
+deployment pipeline. Each stage gates the next:
+
+1. **Commit** — `go vet`, Go unit tests, and the binary; UI lint, type check,
+   unit tests and build. Under five minutes, runs on every event.
+2. **Image** — builds the release candidate once for `linux/amd64` and pushes
+   it to GHCR tagged `sha-<short>`.
+3. **Acceptance** — pulls that exact image, brings up the stack from
+   `docker-compose.test.yml`, and runs the Cucumber/Playwright suite across
+   desktop, tablet and mobile.
+4. **Promote** — retags the candidate as `:latest`. Only on `main`, and only
+   after acceptance passed.
+
+The candidate is built once and promoted by retag, never rebuilt, so the image
+carrying `:latest` is bit-identical to the one acceptance ran against.
+
+Pull requests run stages 1–3, so nothing reaches `main` without having passed
+E2E. Trunk pipelines are serialised by a `concurrency` group — promote retags a
+shared tag, and two runs finishing out of order would leave `:latest` on the
+older commit with every job green.
+
+See `docs/adr/0001-trunk-based-delivery-pipeline.md`.
 
 ### Build Arguments
 

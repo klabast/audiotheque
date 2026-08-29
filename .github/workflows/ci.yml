@@ -9,16 +9,23 @@ name: CD Pipeline
 #
 # Where each stage runs:
 #
-#   pull_request  commit stage only. Fast signal while iterating; the
-#                 candidate is not built because the PR head is not what
-#                 gets merged.
-#   merge_group   full pipeline. The merge queue tests the *prospective
-#                 combination* of trunk + this PR, so two independently
-#                 green PRs can no longer break trunk together. This is
-#                 the gate: nothing reaches main without passing it.
+#   pull_request  full pipeline minus promote. Nothing merges without
+#                 having passed acceptance, so trunk cannot go red from a
+#                 change that fails E2E.
+#   merge_group   full pipeline. Only fires if a merge queue is ever
+#                 available (GitHub offers it for org-owned repos, and
+#                 for private repos on Team+; this repo is user-owned, so
+#                 today it never fires). Kept so enabling the queue is a
+#                 settings change, not a workflow change.
 #   push (main)   full pipeline plus promote. Squash-merging produces a
 #                 new sha, so the artifact that gets released is rebuilt
-#                 and re-verified rather than assumed from the queue.
+#                 and re-verified rather than assumed from the PR run.
+#
+# Testing the *combination* of trunk + the change is what a merge queue
+# would give us. Without one, branch protection requires the PR branch to
+# be up to date with main before it can merge, which forces the same
+# question to be answered — just by updating the branch rather than by a
+# queue building a speculative merge.
 #
 # The image is built ONCE per sha and promoted by retag, never rebuilt —
 # what carries :latest is bit-identical to what passed acceptance.
@@ -110,9 +117,6 @@ jobs:
   image:
     name: Build candidate image
     needs: [commit-server, commit-ui]
-    # Not on pull_request: the PR head is not what lands, so a candidate
-    # built from it would be a candidate for something that never ships.
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -159,7 +163,6 @@ jobs:
   acceptance:
     name: Acceptance / E2E
     needs: [image]
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

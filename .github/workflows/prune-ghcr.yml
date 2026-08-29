@@ -38,7 +38,12 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       OWNER: klabast
       PACKAGE: ${{ matrix.package }}
-      KEEP: "10"
+      # Each image build produces several versions (manifest plus
+      # attestation/layer entries), and pull requests build candidates too
+      # now, so this is roughly KEEP/3 builds of sha-tagged history to roll
+      # back through. `latest` is preserved by KEEP_TAG_REGEX regardless of
+      # age, so this only bounds how far back a sha tag stays pullable.
+      KEEP: "30"
       # Tag patterns to preserve forever. Anything matching is never
       # deleted regardless of age — semver releases and `latest`.
       KEEP_TAG_REGEX: '^(latest|v[0-9]+(\.[0-9]+)*)$'
