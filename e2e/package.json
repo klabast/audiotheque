@@ -15,9 +15,9 @@
     "test:mobile:headed": "HEADLESS=false npm run test:mobile"
   },
   "devDependencies": {
-    "@cucumber/cucumber": "^13.0.0",
-    "@playwright/test": "^1.61.1",
-    "@types/node": "^26.1.0",
+    "@cucumber/cucumber": "^13.3.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.5",
     "ts-node": "10.9.2",
     "typescript": "6.0.3"
   }
