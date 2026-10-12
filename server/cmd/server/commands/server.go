@@ -136,7 +136,8 @@ func startServer() error {
 	sessionRepo := playback.NewDBSessionRepository(db)
 	trackProvider := playback.NewLibraryTrackProvider(libraryService)
 	playbackService := playback.NewService(trackProvider, sessionRepo)
-	playbackService.SetPlayRecorder(plays.NewRepository(db))
+	playRepo := plays.NewRepository(db)
+	playbackService.SetPlayRecorder(playRepo)
 
 	// Migration: under the unified-session invariant every session names a
 	// real playback device. Sweep any pre-invariant rows so they don't
@@ -263,7 +264,9 @@ func startServer() error {
 	playbackHandler.SetStreamTokenValidator(auth.ValidateStreamToken)
 
 	// Initialize server
-	srv := server.New(authHandler, systemHandler, libraryHandler, playbackHandler, settingsHandler, hub)
+	playsHandler := plays.NewHandler(plays.NewService(playRepo), getUserID)
+
+	srv := server.New(authHandler, systemHandler, libraryHandler, playbackHandler, playsHandler, settingsHandler, hub)
 
 	// Wire WS auth so upgrades register clients under the authenticated user.
 	// Without this, BroadcastToUserExcept matches no clients (all userID=0)

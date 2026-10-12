@@ -6,6 +6,7 @@ import {
 	LibrariesApi,
 	PlaybackApi,
 	SettingsApi,
+	StatsApi,
 	SystemApi,
 	TracksApi,
 	UsersApi
@@ -30,6 +31,7 @@ export const tracksApi = new TracksApi(apiConfig);
 export const usersApi = new UsersApi(apiConfig);
 export const devicesApi = new DevicesApi(apiConfig);
 export const settingsApi = new SettingsApi(apiConfig);
+export const statsApi = new StatsApi(apiConfig);
 
 export * from './generated/src/models';
-export { Configuration } from './generated/src';
+export { Configuration, type GetStatsPeriodEnum } from './generated/src';

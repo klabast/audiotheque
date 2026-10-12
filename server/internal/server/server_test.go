@@ -14,7 +14,7 @@ import (
 
 func TestHealthEndpoint(t *testing.T) {
 	hub := websocket.NewHub()
-	srv := New(nil, nil, nil, nil, nil, hub) // nil handlers are fine for health endpoint
+	srv := New(nil, nil, nil, nil, nil, nil, hub) // nil handlers are fine for health endpoint
 	router := srv.Router()
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -40,7 +40,7 @@ func TestSetUserIDGetter_ForwardsToWSHandler(t *testing.T) {
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	srv := New(nil, nil, nil, nil, nil, hub)
+	srv := New(nil, nil, nil, nil, nil, nil, hub)
 	srv.SetUserIDGetter(func(r *http.Request) (int64, error) {
 		if r.Header.Get("X-User") == "alice" {
 			return 42, nil

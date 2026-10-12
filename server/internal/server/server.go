@@ -4,6 +4,7 @@ import (
 	"audiod/internal/auth"
 	"audiod/internal/library"
 	"audiod/internal/playback"
+	"audiod/internal/plays"
 	"audiod/internal/settings"
 	"audiod/internal/system"
 	"audiod/internal/websocket"
@@ -18,17 +19,19 @@ type Server struct {
 	systemHandler    *system.Handler
 	libraryHandler   *library.Handler
 	playbackHandler  *playback.Handler
+	playsHandler     *plays.Handler
 	settingsHandler  *settings.Handler
 	websocketHandler *websocket.Handler
 	hub              *websocket.Hub
 }
 
-func New(authHandler *auth.Handler, systemHandler *system.Handler, libraryHandler *library.Handler, playbackHandler *playback.Handler, settingsHandler *settings.Handler, hub *websocket.Hub) *Server {
+func New(authHandler *auth.Handler, systemHandler *system.Handler, libraryHandler *library.Handler, playbackHandler *playback.Handler, playsHandler *plays.Handler, settingsHandler *settings.Handler, hub *websocket.Hub) *Server {
 	return &Server{
 		authHandler:      authHandler,
 		systemHandler:    systemHandler,
 		libraryHandler:   libraryHandler,
 		playbackHandler:  playbackHandler,
+		playsHandler:     playsHandler,
 		settingsHandler:  settingsHandler,
 		websocketHandler: websocket.NewHandler(hub),
 		hub:              hub,
@@ -63,6 +66,9 @@ func (s *Server) Router() http.Handler {
 	}
 	if s.playbackHandler != nil {
 		s.playbackHandler.RegisterRoutes(mux)
+	}
+	if s.playsHandler != nil {
+		s.playsHandler.RegisterRoutes(mux)
 	}
 	if s.settingsHandler != nil {
 		s.settingsHandler.RegisterRoutes(mux)

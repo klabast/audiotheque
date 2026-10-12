@@ -5,11 +5,13 @@ import {
 	librariesApi,
 	playbackApi,
 	settingsApi,
+	statsApi,
 	systemApi,
 	tracksApi,
 	usersApi
 } from '$lib/api/client';
 import type {
+	GetStatsPeriodEnum,
 	PlaybackAddToQueueRequestPositionEnum,
 	PlaybackSessionResponse,
 	SettingsDevice as GeneratedSettingsDevice
@@ -468,6 +470,14 @@ class ApiService {
 			return await playbackApi.clearQueue();
 		} catch (err) {
 			return this.rethrow(err, 'Failed to clear queue');
+		}
+	}
+
+	async getStats(period: GetStatsPeriodEnum) {
+		try {
+			return await statsApi.getStats({ period });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to load stats');
 		}
 	}
 
