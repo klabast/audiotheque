@@ -18,30 +18,7 @@ func (r *repository) CreateOrUpdateTrack(track *Track) (*Track, error) {
 	}
 
 	if existing != nil {
-		// Update existing track
-		//language=SQL
-		query := `
-UPDATE track SET
-    album_id = ?, artist_id = ?, file_name = ?, file_size = ?, file_modified = ?,
-    title = ?, sort_title = ?, track_number = ?, disc_number = ?, duration = ?,
-    year = ?, genre = ?, musicbrainz_id = ?, codec = ?, bitrate = ?,
-    sample_rate = ?, bit_depth = ?, channels = ?, is_lossless = ?, is_hires = ?,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = ?`
-
-		_, err := r.db.Exec(query,
-			track.AlbumID, track.ArtistID, track.FileName, track.FileSize, track.FileModified,
-			track.Title, track.SortTitle, track.TrackNumber, track.DiscNumber, track.Duration,
-			track.Year, track.Genre, track.MusicBrainzID, track.Codec, track.Bitrate,
-			track.SampleRate, track.BitDepth, track.Channels, track.IsLossless, track.IsHiRes,
-			existing.ID,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		track.ID = existing.ID
-		return track, nil
+		return r.RelinkTrack(existing.ID, track)
 	}
 
 	// Create new track
@@ -50,14 +27,14 @@ WHERE id = ?`
 INSERT INTO track (
     library_id, album_id, artist_id, file_path, file_name, file_size, file_modified,
     title, sort_title, track_number, disc_number, duration, year, genre, musicbrainz_id,
-    codec, bitrate, sample_rate, bit_depth, channels, is_lossless, is_hires
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    content_hash, codec, bitrate, sample_rate, bit_depth, channels, is_lossless, is_hires
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.Exec(query,
 		track.LibraryID, track.AlbumID, track.ArtistID, track.FilePath, track.FileName,
 		track.FileSize, track.FileModified, track.Title, track.SortTitle, track.TrackNumber,
 		track.DiscNumber, track.Duration, track.Year, track.Genre, track.MusicBrainzID,
-		track.Codec, track.Bitrate, track.SampleRate, track.BitDepth, track.Channels,
+		track.ContentHash, track.Codec, track.Bitrate, track.SampleRate, track.BitDepth, track.Channels,
 		track.IsLossless, track.IsHiRes,
 	)
 	if err != nil {
@@ -71,6 +48,87 @@ INSERT INTO track (
 
 	track.ID = trackID
 	return track, nil
+}
+
+func (r *repository) RelinkTrack(id int64, track *Track) (*Track, error) {
+	//language=SQL
+	query := `
+UPDATE track SET
+    album_id = ?, artist_id = ?, file_path = ?, file_name = ?, file_size = ?, file_modified = ?,
+    title = ?, sort_title = ?, track_number = ?, disc_number = ?, duration = ?,
+    year = ?, genre = ?, musicbrainz_id = ?, content_hash = ?, codec = ?, bitrate = ?,
+    sample_rate = ?, bit_depth = ?, channels = ?, is_lossless = ?, is_hires = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?`
+
+	result, err := r.db.Exec(query,
+		track.AlbumID, track.ArtistID, track.FilePath, track.FileName, track.FileSize, track.FileModified,
+		track.Title, track.SortTitle, track.TrackNumber, track.DiscNumber, track.Duration,
+		track.Year, track.Genre, track.MusicBrainzID, track.ContentHash, track.Codec, track.Bitrate,
+		track.SampleRate, track.BitDepth, track.Channels, track.IsLossless, track.IsHiRes,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrTrackNotFound
+	}
+
+	track.ID = id
+	return track, nil
+}
+
+func (r *repository) ListTracksByMusicBrainzID(libraryID int64, mbid string) ([]*Track, error) {
+	//language=SQL
+	query := `
+SELECT id, library_id, album_id, artist_id, file_path, file_name, file_size, file_modified,
+       title, COALESCE(sort_title, ''), track_number, disc_number, duration, year, COALESCE(genre, ''), COALESCE(musicbrainz_id, ''),
+       COALESCE(codec, ''), bitrate, sample_rate, bit_depth, channels, is_lossless, is_hires,
+       created_at, updated_at
+FROM track
+WHERE library_id = ? AND musicbrainz_id = ?`
+
+	return r.queryTracks(query, libraryID, mbid)
+}
+
+func (r *repository) ListTracksByContentHash(libraryID int64, hash string) ([]*Track, error) {
+	//language=SQL
+	query := `
+SELECT id, library_id, album_id, artist_id, file_path, file_name, file_size, file_modified,
+       title, COALESCE(sort_title, ''), track_number, disc_number, duration, year, COALESCE(genre, ''), COALESCE(musicbrainz_id, ''),
+       COALESCE(codec, ''), bitrate, sample_rate, bit_depth, channels, is_lossless, is_hires,
+       created_at, updated_at
+FROM track
+WHERE library_id = ? AND content_hash = ?`
+
+	return r.queryTracks(query, libraryID, hash)
+}
+
+// ListTracksByTags matches titles and names case-insensitively, so a retag that
+// only fixes capitalisation still finds the track.
+func (r *repository) ListTracksByTags(libraryID int64, tags TrackTags) ([]*Track, error) {
+	//language=SQL
+	query := `
+SELECT t.id, t.library_id, t.album_id, t.artist_id, t.file_path, t.file_name, t.file_size, t.file_modified,
+       t.title, COALESCE(t.sort_title, ''), t.track_number, t.disc_number, t.duration, t.year, COALESCE(t.genre, ''), COALESCE(t.musicbrainz_id, ''),
+       COALESCE(t.codec, ''), t.bitrate, t.sample_rate, t.bit_depth, t.channels, t.is_lossless, t.is_hires,
+       t.created_at, t.updated_at
+FROM track t
+JOIN album al ON al.id = t.album_id
+LEFT JOIN artist ar ON ar.id = al.artist_id
+WHERE t.library_id = ?
+  AND t.title = ? COLLATE NOCASE
+  AND al.title = ? COLLATE NOCASE
+  AND COALESCE(ar.name, '') = ? COLLATE NOCASE
+  AND t.disc_number = ?
+  AND t.track_number = ?`
+
+	return r.queryTracks(query, libraryID, tags.Title, tags.Album, tags.AlbumArtist, tags.DiscNumber, tags.TrackNumber)
 }
 
 // GetTrackByID retrieves a track by its ID
