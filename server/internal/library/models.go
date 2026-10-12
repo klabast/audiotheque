@@ -146,6 +146,13 @@ type TrackTags struct {
 	Title       string
 }
 
+// TrackSummary is a track with the names needed to show it outside its album.
+type TrackSummary struct {
+	Track      *Track
+	ArtistName string
+	AlbumTitle string
+}
+
 // TrackArtist represents the many-to-many relationship between tracks and artists
 type TrackArtist struct {
 	TrackID  int64
@@ -249,6 +256,9 @@ type Repository interface {
 	ListTracksByTags(libraryID int64, tags TrackTags) ([]*Track, error)
 	// RelinkTrack points an existing track at a new file, keeping its id.
 	RelinkTrack(id int64, track *Track) (*Track, error)
+
+	// ListTrackSummaries skips ids that don't exist; order is unspecified.
+	ListTrackSummaries(ids []int64) ([]*TrackSummary, error)
 
 	// Access control
 	UserHasLibraryAccess(userID, libraryID int64) (bool, error)

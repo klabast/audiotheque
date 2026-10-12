@@ -9,6 +9,14 @@ beforeEach(() => {
 
 type WsCb = (data: unknown) => void;
 
+const queuedSession = {
+	state: 'playing',
+	deviceId: 'tab-A',
+	current: { trackId: 1, position: 0 },
+	queue: [{ id: 'q1', trackId: 7, addedFrom: { type: 'album', id: 3 } }],
+	source: { type: 'album', id: 100, remaining: [] }
+};
+
 function setupApiMock() {
 	const sessionListeners: WsCb[] = [];
 	const clientIdListeners: WsCb[] = [];
@@ -34,7 +42,12 @@ function setupApiMock() {
 			seekPlayback: vi.fn(),
 			setPlaybackVolume: vi.fn(),
 			transferPlayback: vi.fn(),
-			sendPlaybackPosition: vi.fn()
+			sendPlaybackPosition: vi.fn(),
+			addToQueue: vi.fn().mockResolvedValue(queuedSession),
+			removeFromQueue: vi.fn().mockResolvedValue(queuedSession),
+			clearQueue: vi.fn().mockResolvedValue(queuedSession),
+			moveQueueItem: vi.fn().mockResolvedValue(queuedSession),
+			playFromQueue: vi.fn().mockResolvedValue(queuedSession)
 		}
 	}));
 
@@ -357,5 +370,39 @@ describe('playback store — WS-driven device transfers', () => {
 		// This tab must pause its <audio> element so it doesn't keep playing
 		// alongside MPD.
 		expect(audio.pause).toHaveBeenCalled();
+	});
+});
+
+describe('playback store — queue commands', () => {
+	it.each<['addToQueue' | 'playNext', { trackIds: number[] } | { albumId: number }, string]>([
+		['addToQueue', { trackIds: [7] }, 'end'],
+		['addToQueue', { albumId: 3 }, 'end'],
+		['playNext', { trackIds: [7] }, 'next'],
+		['playNext', { albumId: 3 }, 'next']
+	])('%s %o queues at %s and mirrors the session', async (command, what, position) => {
+		setupApiMock();
+		const { api } = await import('$lib/services/api');
+		const { playback } = await import('./playback.svelte');
+
+		await playback[command](what);
+
+		expect(api.addToQueue).toHaveBeenCalledWith(what, position);
+		expect(playback.session?.queue?.[0]?.id).toBe('q1');
+	});
+
+	it.each([
+		['removeFromQueue', ['q1'], 'removeFromQueue'],
+		['moveQueueItem', ['q1', 2], 'moveQueueItem'],
+		['playFromQueue', ['q1'], 'playFromQueue'],
+		['clearQueue', [], 'clearQueue']
+	] as const)('%s goes to the server and mirrors the session', async (command, args, apiMethod) => {
+		setupApiMock();
+		const { api } = await import('$lib/services/api');
+		const { playback } = await import('./playback.svelte');
+
+		await (playback[command] as (...a: unknown[]) => Promise<void>)(...args);
+
+		expect(api[apiMethod]).toHaveBeenCalledWith(...args);
+		expect(playback.session?.queue?.[0]?.id).toBe('q1');
 	});
 });

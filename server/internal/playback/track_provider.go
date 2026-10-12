@@ -39,3 +39,25 @@ func (p *LibraryTrackProvider) GetAlbumTracks(userID, albumID int64) ([]Track, e
 	}
 	return tracks, nil
 }
+
+func (p *LibraryTrackProvider) GetTracks(userID int64, ids []int64) ([]Track, error) {
+	summaries, err := p.libraryService.GetTracks(userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if len(summaries) != len(ids) {
+		return nil, ErrTrackNotFound
+	}
+
+	tracks := make([]Track, len(summaries))
+	for i, s := range summaries {
+		tracks[i] = Track{ID: s.Track.ID, Title: s.Track.Title, Duration: s.Track.Duration}
+		if s.Track.AlbumID != nil {
+			tracks[i].AlbumID = *s.Track.AlbumID
+		}
+		if s.Track.ArtistID != nil {
+			tracks[i].ArtistID = *s.Track.ArtistID
+		}
+	}
+	return tracks, nil
+}

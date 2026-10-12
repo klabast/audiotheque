@@ -10,58 +10,6 @@ import { AudiodWorld } from '../../support/world';
 // Queue management (not yet implemented)
 // =====================
 
-When('User adds {string} to queue', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('User adds track {string} to queue', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('User adds album {string} to queue', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-When('User adds {string} to play next', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('User adds track {string} to play next', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('User adds album {string} to play next', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-When('User opens queue view', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-When('User removes {string} from queue', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('User clears queue', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-When('User moves {string} to position {int}', async function (this: AudiodWorld, _track: string, _pos: number) {
-	return 'pending';
-});
-
-When('User plays {string} from queue', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('{string} finishes playing', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-When('Current track finishes', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
 When('User starts playing album {string}', async function (this: AudiodWorld, _album: string) {
 	return 'pending';
 });
@@ -86,39 +34,7 @@ When('Last track of source finishes', async function (this: AudiodWorld) {
 	return 'pending';
 });
 
-Given('User has tracks in queue', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Given('User has added {string} to queue', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Given('User has added {string} to play next', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Given('Queue contains {string} and {string}', async function (this: AudiodWorld, _t1: string, _t2: string) {
-	return 'pending';
-});
-
-Given('Queue contains {string}, {string}, {string}', async function (this: AudiodWorld, _t1: string, _t2: string, _t3: string) {
-	return 'pending';
-});
-
-Given('Queue contains {string} from album {string}', async function (this: AudiodWorld, _track: string, _album: string) {
-	return 'pending';
-});
-
-Given('Queue contains multiple tracks', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
 Given('User is playing album {string} from track {int}', async function (this: AudiodWorld, _album: string, _track: number) {
-	return 'pending';
-});
-
-Given('Queue is empty', async function (this: AudiodWorld) {
 	return 'pending';
 });
 
@@ -127,78 +43,6 @@ Given('User has previous session with album {string}', async function (this: Aud
 });
 
 Given('Repeat is enabled', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Then('Queue contains {string} at last position', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('Source remains album {string}', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-Then('Current track is {string} from source', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('Queue order is {string}, {string}', async function (this: AudiodWorld, _t1: string, _t2: string) {
-	return 'pending';
-});
-
-Then('Queue order is {string}, {string}, {string}', async function (this: AudiodWorld, _t1: string, _t2: string, _t3: string) {
-	return 'pending';
-});
-
-Then('Queue contains {string} at position {int}', async function (this: AudiodWorld, _track: string, _pos: number) {
-	return 'pending';
-});
-
-Then('Queue contains {string}', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('User remains on album details page', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Then('Queue contains all tracks from {string} at end', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-Then('Queue contains all tracks from {string}', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-Then('{string} plays after current track', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('Next track is {string} from source', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('Queue view shows explicit queue section', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Then('Queue view shows source section', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Then('Queue view shows playing from {string}', async function (this: AudiodWorld, _album: string) {
-	return 'pending';
-});
-
-Then('Queue does not contain {string}', async function (this: AudiodWorld, _track: string) {
-	return 'pending';
-});
-
-Then('Queue shows {string} with source {string}', async function (this: AudiodWorld, _track: string, _source: string) {
-	return 'pending';
-});
-
-Then('{string} is removed from queue', async function (this: AudiodWorld, _track: string) {
 	return 'pending';
 });
 
@@ -247,10 +91,6 @@ Then('Playback continues from first track', async function (this: AudiodWorld) {
 });
 
 Then('Source is reset to full album', async function (this: AudiodWorld) {
-	return 'pending';
-});
-
-Then('Music continues playing', async function (this: AudiodWorld) {
 	return 'pending';
 });
 

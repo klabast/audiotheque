@@ -26,6 +26,7 @@ type ServiceInterface interface {
 	GetAlbumCoverPath(userID, albumID int64) (string, error)
 	ListTracksByAlbum(userID, albumID int64) ([]*TrackWithArtist, error)
 	Search(userID, libraryID int64, query string) (*SearchResult, error)
+	GetTracks(userID int64, ids []int64) ([]*TrackSummary, error)
 }
 
 type Handler struct {
@@ -70,6 +71,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/albums/{id}", user(h.HandleGetAlbum))
 	mux.HandleFunc("GET /api/albums/{id}/cover", user(h.HandleGetAlbumCover))
 	mux.HandleFunc("GET /api/albums/{id}/tracks", user(h.HandleListAlbumTracks))
+	mux.HandleFunc("POST /api/tracks/lookup", user(h.HandleLookupTracks))
 }
 
 // writeServiceError maps a service-layer error onto a response, keeping the
@@ -556,6 +558,71 @@ type TrackResponse struct {
 	Duration    int    `json:"duration"`
 	IsLossless  bool   `json:"isLossless"`
 	IsHiRes     bool   `json:"isHiRes"`
+}
+
+// TrackDetailResponse is a track with enough album context to show it outside
+// its album: in the queue, the player, search.
+type TrackDetailResponse struct {
+	TrackResponse
+	AlbumID    int64  `json:"albumId"`
+	AlbumTitle string `json:"albumTitle"`
+}
+
+type LookupTracksRequest struct {
+	IDs []int64 `json:"ids"`
+}
+
+// HandleLookupTracks handles POST /api/tracks/lookup
+// @Summary Look up tracks
+// @Description Get tracks by id with their album, in the order asked for. Unknown or inaccessible ids are left out.
+// @Tags tracks
+// @Accept json
+// @Produce json
+// @Param request body LookupTracksRequest true "Track IDs"
+// @Success 200 {array} TrackDetailResponse
+// @Failure 400 {string} string "Bad request"
+// @Router /tracks/lookup [post]
+// @ID lookupTracks
+func (h *Handler) HandleLookupTracks(w http.ResponseWriter, r *http.Request, user *auth.User) {
+	var req LookupTracksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		http.Error(w, "Specify ids", http.StatusBadRequest)
+		return
+	}
+
+	tracks, err := h.service.GetTracks(user.ID, req.IDs)
+	if err != nil {
+		log.Printf("Failed to look up tracks: %v", err)
+		writeServiceError(w, err, "Internal server error")
+		return
+	}
+
+	response := make([]TrackDetailResponse, len(tracks))
+	for i, t := range tracks {
+		var albumID int64
+		if t.Track.AlbumID != nil {
+			albumID = *t.Track.AlbumID
+		}
+		response[i] = TrackDetailResponse{
+			TrackResponse: TrackResponse{
+				ID:          t.Track.ID,
+				Title:       t.Track.Title,
+				ArtistName:  t.ArtistName,
+				TrackNumber: t.Track.TrackNumber,
+				DiscNumber:  t.Track.DiscNumber,
+				Duration:    t.Track.Duration,
+				IsLossless:  t.Track.IsLossless,
+				IsHiRes:     t.Track.IsHiRes,
+			},
+			AlbumID:    albumID,
+			AlbumTitle: t.AlbumTitle,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 // HandleGetAlbum handles GET /api/albums/:id

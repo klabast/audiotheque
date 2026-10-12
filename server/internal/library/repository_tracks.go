@@ -379,3 +379,65 @@ ORDER BY position`
 
 	return trackArtists, rows.Err()
 }
+
+// trackLookupBatch keeps each IN list under SQLite's bound-parameter limit.
+const trackLookupBatch = 500
+
+func (r *repository) ListTrackSummaries(ids []int64) ([]*TrackSummary, error) {
+	var result []*TrackSummary
+	for start := 0; start < len(ids); start += trackLookupBatch {
+		chunk := ids[start:min(start+trackLookupBatch, len(ids))]
+		args := make([]interface{}, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+		}
+
+		//language=SQL
+		query := `
+SELECT t.id, t.library_id, t.album_id, t.artist_id, t.file_path, t.file_name, t.file_size, t.file_modified,
+       t.title, COALESCE(t.sort_title, ''), t.track_number, t.disc_number, t.duration, t.year, COALESCE(t.genre, ''), COALESCE(t.musicbrainz_id, ''),
+       COALESCE(t.codec, ''), t.bitrate, t.sample_rate, t.bit_depth, t.channels, t.is_lossless, t.is_hires,
+       t.created_at, t.updated_at,
+       COALESCE(ar.name, ''), COALESCE(al.title, '')
+FROM track t
+LEFT JOIN artist ar ON ar.id = t.artist_id
+LEFT JOIN album al ON al.id = t.album_id
+WHERE t.id IN (` + placeholders(len(chunk)) + `)`
+
+		rows, err := r.db.Query(query, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			track := &Track{}
+			summary := &TrackSummary{Track: track}
+			var albumID, artistID, bitDepth sql.NullInt64
+			if err := rows.Scan(
+				&track.ID, &track.LibraryID, &albumID, &artistID, &track.FilePath, &track.FileName,
+				&track.FileSize, &track.FileModified, &track.Title, &track.SortTitle, &track.TrackNumber,
+				&track.DiscNumber, &track.Duration, &track.Year, &track.Genre, &track.MusicBrainzID,
+				&track.Codec, &track.Bitrate, &track.SampleRate, &bitDepth, &track.Channels,
+				&track.IsLossless, &track.IsHiRes, &track.CreatedAt, &track.UpdatedAt,
+				&summary.ArtistName, &summary.AlbumTitle,
+			); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if albumID.Valid {
+				track.AlbumID = &albumID.Int64
+			}
+			if artistID.Valid {
+				track.ArtistID = &artistID.Int64
+			}
+			if bitDepth.Valid {
+				track.BitDepth = int(bitDepth.Int64)
+			}
+			result = append(result, summary)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}

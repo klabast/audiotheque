@@ -1,6 +1,7 @@
 package library
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -992,3 +993,38 @@ func (m *mockRepository) ListTracksByTags(libraryID int64, tags TrackTags) ([]*T
 	return nil, nil
 }
 func (m *mockRepository) RelinkTrack(id int64, track *Track) (*Track, error) { return track, nil }
+
+func TestService_GetTracks_KeepsRequestOrderAndHidesInaccessible(t *testing.T) {
+	// Given tracks in a library the user can read and one they can't
+	repo := newMockRepository()
+	repo.libraries[7] = []*Library{{ID: 1}}
+	repo.tracks[1] = &Track{ID: 1, LibraryID: 1, Title: "One"}
+	repo.tracks[2] = &Track{ID: 2, LibraryID: 1, Title: "Two"}
+	repo.tracks[3] = &Track{ID: 3, LibraryID: 2, Title: "Elsewhere"}
+	svc := NewService(repo)
+
+	// When the user looks them up
+	got, err := svc.GetTracks(7, []int64{2, 3, 1, 99})
+	if err != nil {
+		t.Fatalf("GetTracks: %v", err)
+	}
+
+	// Then the readable ones come back in the order asked for
+	var ids []int64
+	for _, s := range got {
+		ids = append(ids, s.Track.ID)
+	}
+	if !slices.Equal(ids, []int64{2, 1}) {
+		t.Errorf("ids = %v, want [2 1]", ids)
+	}
+}
+
+func (m *mockRepository) ListTrackSummaries(ids []int64) ([]*TrackSummary, error) {
+	var result []*TrackSummary
+	for _, id := range ids {
+		if t, ok := m.tracks[id]; ok {
+			result = append(result, &TrackSummary{Track: t})
+		}
+	}
+	return result, nil
+}
