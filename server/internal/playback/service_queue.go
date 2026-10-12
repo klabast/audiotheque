@@ -85,6 +85,7 @@ func (s *Service) PlayFromQueue(userID int64, itemID string) (*Session, error) {
 		return nil, err
 	}
 
+	s.recordPlay(session)
 	if session.Current != nil {
 		session.History = append(session.History, session.Current.TrackID)
 	}
