@@ -3,7 +3,7 @@
 	import { APP_NAME } from '$lib/branding';
 	import { Avatar } from '$lib/components/ui';
 	import { routes } from '$lib/utils/navigation';
-	import { Home, Settings, LogOut, X } from 'lucide-svelte';
+	import { ChartNoAxesColumn, Home, Settings, LogOut, X } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
@@ -17,7 +17,15 @@
 		auth.logout();
 	}
 
-	const navigationLinks = [{ label: m['common.home'](), href: routes.home, icon: Home }];
+	const navigationLinks = [
+		{ label: m['common.home'](), href: routes.home, icon: Home, testId: 'nav-home-link' },
+		{
+			label: m['common.stats'](),
+			href: routes.stats,
+			icon: ChartNoAxesColumn,
+			testId: 'nav-stats-link'
+		}
+	];
 </script>
 
 <aside
@@ -55,6 +63,7 @@
 						href={link.href}
 						onclick={closeLeftDrawer}
 						class="text-text-primary hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
+						data-testid={link.testId}
 					>
 						<Icon class="h-5 w-5" />
 						<span class="text-sm font-medium">{link.label}</span>

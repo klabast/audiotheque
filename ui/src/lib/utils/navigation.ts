@@ -20,6 +20,7 @@ export const routes = {
 	login: resolve('/login'),
 	home: resolve('/'),
 	settings: resolve('/settings'),
+	stats: resolve('/stats'),
 	settingsAccount: resolve('/settings/account'),
 	settingsGeneral: resolve('/settings/general')
 };
