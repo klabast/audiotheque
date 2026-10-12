@@ -71,12 +71,15 @@ exists for the plain move/rename case. It changes on retag, which rules 1 and
 3 cover. Existing rows get it on the next scan that touches them; until then
 they can't match on rule 2.
 
-**Albums follow their tracks.** `GetOrCreateAlbum` matches, in order: the
-MusicBrainz release id (which the scanner extracts today but doesn't save),
-then the existing `(artist, title, folder_path)`, then the same artist and
-title whose `folder_path` no longer exists on disk. That last match updates
-`folder_path` and keeps the id. At the end of a scan, albums with no tracks
-left are deleted.
+**Albums follow their tracks.** An album still matches on its existing
+`(artist, title, folder_path)` first. Failing that, a candidate is an album
+with the same artist and title, or the same MusicBrainz release id (which the
+scanner extracts today but doesn't save). A candidate qualifies only if its
+folder is gone from disk, or it is the same folder retagged in place. If
+exactly one qualifies, its row takes the new folder, artist and title and
+keeps its id. A release id alone is not enough, because two editions of one
+release (standard and hi-res) share it and must stay two albums. At the end of
+a scan, albums with no tracks left are deleted.
 
 **Matching never crosses libraries.** A file moved from one library to another
 is a new track.
