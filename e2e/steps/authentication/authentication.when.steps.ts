@@ -125,11 +125,11 @@ When(
 			const isCurrent =
 				(await row.locator('[data-testid="current-session-badge"]').count()) > 0;
 			if (!isCurrent) {
-				await row.locator('[data-testid^="revoke-session-"]').click();
-				await page.waitForResponse(
-					(r) => r.url().includes('/api/auth/sessions/') && r.request().method() === 'DELETE',
-					{ timeout: 5000 }
+				const revoked = page.waitForResponse(
+					(r) => r.url().includes('/api/auth/sessions/') && r.request().method() === 'DELETE'
 				);
+				await row.locator('[data-testid^="revoke-session-"]').click();
+				await revoked;
 				return;
 			}
 		}
