@@ -124,6 +124,7 @@ type Track struct {
 	Year          int
 	Genre         string
 	MusicBrainzID string
+	ContentHash   string
 	Codec         string
 	Bitrate       int
 	SampleRate    int
@@ -133,6 +134,16 @@ type Track struct {
 	IsHiRes       bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// TrackTags is the tag tuple that identifies a recording when it has neither a
+// MusicBrainz id nor unchanged bytes to go by.
+type TrackTags struct {
+	AlbumArtist string
+	Album       string
+	DiscNumber  int
+	TrackNumber int
+	Title       string
 }
 
 // TrackArtist represents the many-to-many relationship between tracks and artists
@@ -212,6 +223,11 @@ type Repository interface {
 	GetOrCreateAlbum(libraryID int64, artistID *int64, title string, releaseDate string, folderPath string) (*Album, error)
 	GetAlbumByID(albumID int64) (*Album, error)
 	UpdateAlbumCoverArt(id int64, coverPath string) error
+	UpdateAlbumMusicBrainzID(id int64, mbid string) error
+	ListAlbumsByMusicBrainzID(libraryID int64, mbid string) ([]*Album, error)
+	ListAlbumsByArtistTitle(libraryID int64, artistID *int64, title string) ([]*Album, error)
+	RelinkAlbum(id int64, artistID *int64, title string, folderPath string) error
+	DeleteEmptyAlbums(libraryID int64) (int64, error)
 	ListAlbumsByLibrary(libraryID int64, opts ListAlbumsOptions) ([]*Album, error)
 	SearchAlbumsByLibrary(libraryID int64, query string, limit int) ([]*Album, error)
 	SearchArtistsByLibrary(libraryID int64, query string, limit int) ([]*Artist, error)
@@ -228,6 +244,11 @@ type Repository interface {
 	ListTracksByLibrary(libraryID int64) ([]*Track, error)
 	GetTrackPathsForLibrary(libraryID int64) (map[string]time.Time, error) // path -> modTime
 	DeleteTracksByPaths(libraryID int64, paths []string) (int64, error)
+	ListTracksByMusicBrainzID(libraryID int64, mbid string) ([]*Track, error)
+	ListTracksByContentHash(libraryID int64, hash string) ([]*Track, error)
+	ListTracksByTags(libraryID int64, tags TrackTags) ([]*Track, error)
+	// RelinkTrack points an existing track at a new file, keeping its id.
+	RelinkTrack(id int64, track *Track) (*Track, error)
 
 	// Access control
 	UserHasLibraryAccess(userID, libraryID int64) (bool, error)

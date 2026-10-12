@@ -1,9 +1,12 @@
 package scanner
 
 import (
+	"errors"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +29,9 @@ const (
 	// event is emitted during a busy scan. The UI debounces its own refetch on
 	// top of this, but throttling at the source keeps the WS quiet.
 	LibraryUpdatedThrottle = 2 * time.Second
+	// RelinkDurationTolerance is how far apart two durations may be for files
+	// with matching tags to count as the same recording (docs/adr/0002).
+	RelinkDurationTolerance = 2 * time.Second
 )
 
 // Broadcaster is the subset of *websocket.Hub the scanner actually needs.
@@ -268,7 +274,7 @@ func (w *Worker) processJob(job *library.ScanJob) bool {
 			}
 
 			// Process the audio file
-			w.processAudioFile(lib.ID, path, info, job)
+			w.processAudioFile(lib, path, info, job)
 
 			return nil
 		})
@@ -280,6 +286,7 @@ func (w *Worker) processJob(job *library.ScanJob) bool {
 	}
 
 	w.removeVanishedTracks(lib.ID, existingTracks, seen, walkFailed)
+	w.removeEmptyAlbums(lib.ID)
 
 	// Phase 4: Complete - broadcast final progress then delete job
 	job.CurrentFile = ""
@@ -307,7 +314,8 @@ func (w *Worker) processJob(job *library.ScanJob) bool {
 // corruption-supplied tag headers, and this runs on the worker goroutine, so an
 // unrecovered panic takes the whole server down and then crash-loops on the
 // same file after restart.
-func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo, job *library.ScanJob) {
+func (w *Worker) processAudioFile(lib *library.Library, path string, info fs.FileInfo, job *library.ScanJob) {
+	libraryID := lib.ID
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Recovered from panic processing %s: %v", path, r)
@@ -383,7 +391,7 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 	if albumTitle == "" {
 		albumTitle = "Unknown Album"
 	}
-	album, err := w.repo.GetOrCreateAlbum(libraryID, albumArtistID, albumTitle, "", filepath.Dir(path))
+	album, err := w.resolveAlbum(lib, albumArtistID, albumTitle, meta.MusicBrainzAlbumID, filepath.Dir(path))
 	if err != nil {
 		log.Printf("Error creating album: %v", err)
 		job.Errors++
@@ -401,7 +409,11 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 		}
 	}
 
-	// Create or update track
+	contentHash, err := library.ContentHash(path)
+	if err != nil {
+		log.Printf("Error hashing %s: %v", path, err)
+	}
+
 	track := &library.Track{
 		LibraryID:     libraryID,
 		AlbumID:       albumID,
@@ -417,6 +429,7 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 		Year:          meta.Year,
 		Genre:         meta.Genre,
 		MusicBrainzID: meta.MusicBrainzTrackID,
+		ContentHash:   contentHash,
 		Codec:         meta.Codec,
 		Bitrate:       meta.Bitrate,
 		SampleRate:    meta.SampleRate,
@@ -427,13 +440,31 @@ func (w *Worker) processAudioFile(libraryID int64, path string, info fs.FileInfo
 	}
 
 	existing, _ := w.repo.GetTrackByPath(libraryID, path)
-	savedTrack, err := w.repo.CreateOrUpdateTrack(track)
+	var moved *library.Track
+	if existing == nil {
+		moved, err = w.findMovedTrack(lib, track, albumArtistName, albumTitle)
+		if err != nil {
+			log.Printf("Error looking for a moved track for %s: %v", path, err)
+			job.Errors++
+			job.ProcessedFiles++
+			w.throttledUpdateAndBroadcast(job)
+			return
+		}
+	}
+
+	var savedTrack *library.Track
+	if moved != nil {
+		log.Printf("Relinked track %d: %s → %s", moved.ID, moved.FilePath, path)
+		savedTrack, err = w.repo.RelinkTrack(moved.ID, track)
+	} else {
+		savedTrack, err = w.repo.CreateOrUpdateTrack(track)
+	}
 	trackChanged := err == nil
 	if err != nil {
 		log.Printf("Error saving track: %v", err)
 		job.Errors++
 	} else {
-		if existing != nil {
+		if existing != nil || moved != nil {
 			job.TracksUpdated++
 		} else {
 			job.TracksAdded++
@@ -482,7 +513,157 @@ func (w *Worker) removeVanishedTracks(libraryID int64, existing map[string]time.
 		log.Printf("Error removing %d missing track(s) from library %d: %v", len(vanished), libraryID, err)
 		return
 	}
-	log.Printf("Removed %d track(s) no longer on disk from library %d", deleted, libraryID)
+	if deleted > 0 {
+		log.Printf("Removed %d track(s) no longer on disk from library %d", deleted, libraryID)
+	}
+}
+
+func (w *Worker) removeEmptyAlbums(libraryID int64) {
+	deleted, err := w.repo.DeleteEmptyAlbums(libraryID)
+	if err != nil {
+		log.Printf("Error removing empty albums from library %d: %v", libraryID, err)
+		return
+	}
+	if deleted > 0 {
+		log.Printf("Removed %d empty album(s) from library %d", deleted, libraryID)
+	}
+}
+
+// resolveAlbum finds the album a file belongs to, keeping an album's id when
+// its folder moved or its tags changed in place (docs/adr/0002).
+func (w *Worker) resolveAlbum(lib *library.Library, artistID *int64, title, mbid, folder string) (*library.Album, error) {
+	candidates, err := w.repo.ListAlbumsByArtistTitle(lib.ID, artistID, title)
+	if err != nil {
+		return nil, err
+	}
+	if mbid != "" {
+		byRelease, err := w.repo.ListAlbumsByMusicBrainzID(lib.ID, mbid)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, byRelease...)
+	}
+
+	movable := map[int64]*library.Album{}
+	for _, a := range candidates {
+		if a.FolderPath == folder && a.Title == title && sameID(a.ArtistID, artistID) {
+			return w.withReleaseID(a, mbid)
+		}
+		if a.FolderPath == folder || goneFromDisk(a.FolderPath, lib.Paths) {
+			movable[a.ID] = a
+		}
+	}
+
+	if len(movable) == 1 {
+		for _, a := range movable {
+			log.Printf("Relinked album %d: %s → %s", a.ID, a.FolderPath, folder)
+			if err := w.repo.RelinkAlbum(a.ID, artistID, title, folder); err != nil {
+				return nil, err
+			}
+			a.ArtistID, a.Title, a.FolderPath = artistID, title, folder
+			return w.withReleaseID(a, mbid)
+		}
+	}
+
+	album, err := w.repo.GetOrCreateAlbum(lib.ID, artistID, title, "", folder)
+	if err != nil {
+		return nil, err
+	}
+	return w.withReleaseID(album, mbid)
+}
+
+func (w *Worker) withReleaseID(album *library.Album, mbid string) (*library.Album, error) {
+	if mbid == "" || album.MusicBrainzID == mbid {
+		return album, nil
+	}
+	if err := w.repo.UpdateAlbumMusicBrainzID(album.ID, mbid); err != nil {
+		return nil, err
+	}
+	album.MusicBrainzID = mbid
+	return album, nil
+}
+
+// findMovedTrack looks for an existing track that is the same recording as a
+// file at a new path: same recording id, then same content hash, then same
+// tags and length. Only a track whose own file is gone qualifies, and a rule
+// only counts when it finds exactly one (docs/adr/0002).
+func (w *Worker) findMovedTrack(lib *library.Library, t *library.Track, albumArtist, albumTitle string) (*library.Track, error) {
+	if t.MusicBrainzID != "" {
+		candidates, err := w.repo.ListTracksByMusicBrainzID(lib.ID, t.MusicBrainzID)
+		if err != nil {
+			return nil, err
+		}
+		if match := soleVanished(candidates, lib.Paths, nil); match != nil {
+			return match, nil
+		}
+	}
+
+	if t.ContentHash != "" {
+		candidates, err := w.repo.ListTracksByContentHash(lib.ID, t.ContentHash)
+		if err != nil {
+			return nil, err
+		}
+		if match := soleVanished(candidates, lib.Paths, nil); match != nil {
+			return match, nil
+		}
+	}
+
+	candidates, err := w.repo.ListTracksByTags(lib.ID, library.TrackTags{
+		AlbumArtist: albumArtist,
+		Album:       albumTitle,
+		DiscNumber:  t.DiscNumber,
+		TrackNumber: t.TrackNumber,
+		Title:       t.Title,
+	})
+	if err != nil {
+		return nil, err
+	}
+	closeInLength := func(c *library.Track) bool {
+		diff := time.Duration(c.Duration-t.Duration) * time.Millisecond
+		return diff.Abs() <= RelinkDurationTolerance
+	}
+	return soleVanished(candidates, lib.Paths, closeInLength), nil
+}
+
+func soleVanished(candidates []*library.Track, roots []string, keep func(*library.Track) bool) *library.Track {
+	var match *library.Track
+	for _, c := range candidates {
+		if keep != nil && !keep(c) {
+			continue
+		}
+		if !goneFromDisk(c.FilePath, roots) {
+			continue
+		}
+		if match != nil {
+			return nil
+		}
+		match = c
+	}
+	return match
+}
+
+// goneFromDisk reports whether path no longer exists while the library path
+// holding it is still readable, so an unmounted share never looks like a move.
+func goneFromDisk(path string, roots []string) bool {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	for _, root := range roots {
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		_, err = os.Stat(root)
+		return err == nil
+	}
+	return false
+}
+
+func sameID(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // countAudioFiles counts total audio files in paths

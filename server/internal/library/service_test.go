@@ -970,3 +970,25 @@ func TestListAlbumsHiResFilter(t *testing.T) {
 		}
 	})
 }
+
+func (m *mockRepository) UpdateAlbumMusicBrainzID(id int64, mbid string) error { return nil }
+func (m *mockRepository) ListAlbumsByMusicBrainzID(libraryID int64, mbid string) ([]*Album, error) {
+	return nil, nil
+}
+func (m *mockRepository) ListAlbumsByArtistTitle(libraryID int64, artistID *int64, title string) ([]*Album, error) {
+	return nil, nil
+}
+func (m *mockRepository) RelinkAlbum(id int64, artistID *int64, title string, folderPath string) error {
+	return nil
+}
+func (m *mockRepository) DeleteEmptyAlbums(libraryID int64) (int64, error) { return 0, nil }
+func (m *mockRepository) ListTracksByMusicBrainzID(libraryID int64, mbid string) ([]*Track, error) {
+	return nil, nil
+}
+func (m *mockRepository) ListTracksByContentHash(libraryID int64, hash string) ([]*Track, error) {
+	return nil, nil
+}
+func (m *mockRepository) ListTracksByTags(libraryID int64, tags TrackTags) ([]*Track, error) {
+	return nil, nil
+}
+func (m *mockRepository) RelinkTrack(id int64, track *Track) (*Track, error) { return track, nil }
