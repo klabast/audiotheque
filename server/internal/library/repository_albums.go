@@ -221,3 +221,102 @@ func buildAlbumOrderBy(specs []SortSpec) string {
 	parts = append(parts, "a.id ASC")
 	return strings.Join(parts, ", ")
 }
+
+func (r *repository) UpdateAlbumMusicBrainzID(id int64, mbid string) error {
+	//language=SQL
+	query := `UPDATE album SET musicbrainz_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	_, err := r.db.Exec(query, mbid, id)
+	return err
+}
+
+func (r *repository) ListAlbumsByMusicBrainzID(libraryID int64, mbid string) ([]*Album, error) {
+	//language=SQL
+	query := `
+SELECT a.id, a.library_id, a.artist_id, a.title, COALESCE(a.sort_title, ''), COALESCE(a.musicbrainz_id, ''),
+       COALESCE(a.release_date, ''), COALESCE(a.genre, ''), COALESCE(a.total_tracks, 0), COALESCE(a.total_discs, 0),
+       COALESCE(a.cover_art_path, ''), COALESCE(a.is_compilation, 0),
+       EXISTS(SELECT 1 FROM track t WHERE t.album_id = a.id AND t.is_hires = 1) AS is_hires,
+       COALESCE(a.folder_path, ''), COALESCE(a.release_type, 'original'),
+       a.created_at, a.updated_at
+FROM album a
+WHERE a.library_id = ? AND a.musicbrainz_id = ?`
+
+	return r.queryAlbums(query, libraryID, mbid)
+}
+
+func (r *repository) ListAlbumsByArtistTitle(libraryID int64, artistID *int64, title string) ([]*Album, error) {
+	//language=SQL
+	query := `
+SELECT a.id, a.library_id, a.artist_id, a.title, COALESCE(a.sort_title, ''), COALESCE(a.musicbrainz_id, ''),
+       COALESCE(a.release_date, ''), COALESCE(a.genre, ''), COALESCE(a.total_tracks, 0), COALESCE(a.total_discs, 0),
+       COALESCE(a.cover_art_path, ''), COALESCE(a.is_compilation, 0),
+       EXISTS(SELECT 1 FROM track t WHERE t.album_id = a.id AND t.is_hires = 1) AS is_hires,
+       COALESCE(a.folder_path, ''), COALESCE(a.release_type, 'original'),
+       a.created_at, a.updated_at
+FROM album a
+WHERE a.library_id = ? AND a.artist_id IS ? AND a.title = ?`
+
+	return r.queryAlbums(query, libraryID, artistID, title)
+}
+
+// RelinkAlbum moves an existing album to a new folder (and artist/title, for a
+// retag), keeping its id.
+func (r *repository) RelinkAlbum(id int64, artistID *int64, title string, folderPath string) error {
+	//language=SQL
+	query := `
+UPDATE album SET artist_id = ?, title = ?, folder_path = ?, release_type = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?`
+	result, err := r.db.Exec(query, artistID, title, folderPath, detectReleaseType(folderPath), id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrAlbumNotFound
+	}
+	return nil
+}
+
+func (r *repository) DeleteEmptyAlbums(libraryID int64) (int64, error) {
+	//language=SQL
+	query := `
+DELETE FROM album
+WHERE library_id = ?
+  AND NOT EXISTS (SELECT 1 FROM track t WHERE t.album_id = album.id)`
+	result, err := r.db.Exec(query, libraryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (r *repository) queryAlbums(query string, args ...interface{}) ([]*Album, error) {
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var albums []*Album
+	for rows.Next() {
+		album := &Album{}
+		var artistID sql.NullInt64
+		if err := rows.Scan(
+			&album.ID, &album.LibraryID, &artistID, &album.Title, &album.SortTitle,
+			&album.MusicBrainzID, &album.ReleaseDate, &album.Genre, &album.TotalTracks,
+			&album.TotalDiscs, &album.CoverArtPath, &album.IsCompilation, &album.IsHiRes,
+			&album.FolderPath, &album.ReleaseType,
+			&album.CreatedAt, &album.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if artistID.Valid {
+			album.ArtistID = &artistID.Int64
+		}
+		albums = append(albums, album)
+	}
+	return albums, rows.Err()
+}

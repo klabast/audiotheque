@@ -142,7 +142,7 @@ func TestProcessAudioFile_SurvivesMetadataPanic(t *testing.T) {
 			t.Fatalf("panic escaped processAudioFile: %v", r)
 		}
 	}()
-	w.processAudioFile(libID, path, info, job)
+	w.processAudioFile(&library.Library{ID: libID}, path, info, job)
 
 	// Then the file is counted as an error and the scan moves on
 	if job.Errors != 1 {
