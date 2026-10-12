@@ -20,6 +20,13 @@ type stubService struct {
 	err          error
 	caps         *DeviceCapabilities
 	capsDeviceID string
+
+	queueCall     string
+	queueTrackIDs []int64
+	queueAlbumID  int64
+	queuePosition QueuePosition
+	queueItemID   string
+	queueIndex    int
 }
 
 func (s *stubService) PlayAlbum(userID, albumID, startTrackID int64) (*Session, error) {
@@ -162,4 +169,37 @@ func TestHandlePlay_NoDeviceAndNoClientID_Returns400(t *testing.T) {
 		t.Errorf("service must not be called when no device can be inferred (PlayAlbum=%v, PlayAlbumOnDevice=%v)",
 			svc.playAlbumCalled, svc.playAlbumOnDeviceCalled)
 	}
+}
+
+func (s *stubService) AddTracksToQueue(userID int64, ids []int64, pos QueuePosition) (*Session, error) {
+	s.queueCall, s.queueTrackIDs, s.queuePosition = "addTracks", ids, pos
+	return s.queuedSession(userID)
+}
+func (s *stubService) AddAlbumToQueue(userID, albumID int64, pos QueuePosition) (*Session, error) {
+	s.queueCall, s.queueAlbumID, s.queuePosition = "addAlbum", albumID, pos
+	return s.queuedSession(userID)
+}
+func (s *stubService) RemoveFromQueue(userID int64, itemID string) (*Session, error) {
+	s.queueCall, s.queueItemID = "remove", itemID
+	return s.queuedSession(userID)
+}
+func (s *stubService) ClearQueue(userID int64) (*Session, error) {
+	s.queueCall = "clear"
+	return s.queuedSession(userID)
+}
+func (s *stubService) MoveQueueItem(userID int64, itemID string, to int) (*Session, error) {
+	s.queueCall, s.queueItemID, s.queueIndex = "move", itemID, to
+	return s.queuedSession(userID)
+}
+func (s *stubService) PlayFromQueue(userID int64, itemID string) (*Session, error) {
+	s.queueCall, s.queueItemID = "play", itemID
+	return s.queuedSession(userID)
+}
+
+func (s *stubService) queuedSession(userID int64) (*Session, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &Session{UserID: userID, State: StatePlaying, DeviceID: "stub",
+		Queue: []QueueItem{{ID: "q1", TrackID: 7, AddedFrom: SourceTypeAlbum, AddedFromID: 3}}}, nil
 }

@@ -58,9 +58,9 @@ Audiotheque is built for **music lovers who value privacy, control, and audio qu
 ### 🚧 In Progress
 
 **Queue Management**:
-- [ ] **WebSocket queue commands** (replacing REST endpoints)
-- [ ] Real-time queue updates across all clients
-- [ ] Queue operation broadcasts via WebSocket
+- [x] Play next, add to queue (tracks or whole albums), remove, reorder, clear, play from queue
+- [x] Real-time queue updates across all clients (the session broadcast carries the queue)
+- [ ] **WebSocket queue commands** (commands are REST today)
 
 ### 📋 Planned Features
 

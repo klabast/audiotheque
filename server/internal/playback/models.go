@@ -6,6 +6,9 @@ import "errors"
 var (
 	ErrTrackNotFound = errors.New("track not found")
 	ErrAccessDenied  = errors.New("access denied")
+	// ErrQueueItemNotFound means the queue entry is gone — already played,
+	// removed, or the client is acting on a stale view of the queue.
+	ErrQueueItemNotFound = errors.New("queue item not found")
 )
 
 // State represents the playback state
@@ -51,10 +54,20 @@ type CurrentTrack struct {
 
 // QueueItem represents a track in the explicit queue
 type QueueItem struct {
+	ID          string // Stable handle, so the same track queued twice stays two entries
 	TrackID     int64
 	AddedFromID int64      // Album/playlist it was added from (for UI)
 	AddedFrom   SourceType // Type of source it was added from
 }
+
+// QueuePosition is where queued tracks go: up next, or after everything
+// already queued.
+type QueuePosition string
+
+const (
+	QueueNext QueuePosition = "next"
+	QueueEnd  QueuePosition = "end"
+)
 
 // DeviceType represents the type of playback device
 type DeviceType string

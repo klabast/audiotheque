@@ -21,6 +21,8 @@ import type { PlaybackSessionResponse } from '$lib/api/client';
  *   - "Sound waves"        → audio element / MPD (the actual hardware)
  */
 
+type QueueTarget = { trackIds: number[] } | { albumId: number };
+
 export const playback = (() => {
 	// Reactive mirror of the backend session.
 	let session = $state<PlaybackSessionResponse | null>(null);
@@ -264,6 +266,31 @@ export const playback = (() => {
 			// Mute = volume 0; unmute = restore last non-zero volume.
 			const target = volume100 > 0 ? 0 : lastNonZeroVolume;
 			session = (await api.setPlaybackVolume(target)) as PlaybackSessionResponse;
+		},
+
+		// Queue edits. "what" is either specific tracks or a whole album.
+		async addToQueue(what: QueueTarget) {
+			session = (await api.addToQueue(what, 'end')) as PlaybackSessionResponse;
+		},
+
+		async playNext(what: QueueTarget) {
+			session = (await api.addToQueue(what, 'next')) as PlaybackSessionResponse;
+		},
+
+		async removeFromQueue(itemId: string) {
+			session = (await api.removeFromQueue(itemId)) as PlaybackSessionResponse;
+		},
+
+		async moveQueueItem(itemId: string, index: number) {
+			session = (await api.moveQueueItem(itemId, index)) as PlaybackSessionResponse;
+		},
+
+		async playFromQueue(itemId: string) {
+			session = (await api.playFromQueue(itemId)) as PlaybackSessionResponse;
+		},
+
+		async clearQueue() {
+			session = (await api.clearQueue()) as PlaybackSessionResponse;
 		},
 
 		async onTrackEnded() {

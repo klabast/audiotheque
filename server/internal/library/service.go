@@ -388,3 +388,37 @@ func validatePaths(paths []string) error {
 	}
 	return nil
 }
+
+// GetTracks looks tracks up by id, in the order asked for. Tracks that don't
+// exist or sit in a library the user can't read are left out, so callers that
+// need every one of them compare lengths.
+func (s *Service) GetTracks(userID int64, ids []int64) ([]*TrackSummary, error) {
+	summaries, err := s.repo.ListTrackSummaries(ids)
+	if err != nil {
+		return nil, err
+	}
+
+	readable := map[int64]bool{}
+	byID := make(map[int64]*TrackSummary, len(summaries))
+	for _, summary := range summaries {
+		libraryID := summary.Track.LibraryID
+		if _, checked := readable[libraryID]; !checked {
+			allowed, err := s.repo.UserHasLibraryAccess(userID, libraryID)
+			if err != nil {
+				return nil, err
+			}
+			readable[libraryID] = allowed
+		}
+		if readable[libraryID] {
+			byID[summary.Track.ID] = summary
+		}
+	}
+
+	result := make([]*TrackSummary, 0, len(ids))
+	for _, id := range ids {
+		if summary, ok := byID[id]; ok {
+			result = append(result, summary)
+		}
+	}
+	return result, nil
+}

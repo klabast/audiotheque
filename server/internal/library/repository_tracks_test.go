@@ -284,3 +284,38 @@ func TestGetTrackArtists_OrderedByPosition(t *testing.T) {
 		t.Fatalf("expected featured artist second (position 1), got %+v", artists[1])
 	}
 }
+
+func TestListTrackSummaries_CarriesAlbumAndArtist(t *testing.T) {
+	// Given two tracks on one album
+	repo, _, libID := setupTestRepo(t)
+	artist, album := mustCreateAlbum(t, repo, libID)
+	var ids []int64
+	for i, title := range []string{"One", "Two"} {
+		tr, err := repo.CreateOrUpdateTrack(&Track{
+			LibraryID: libID, AlbumID: &album.ID, ArtistID: &artist.ID,
+			FilePath: "/m/track-test/" + title + ".flac", FileName: title + ".flac",
+			FileModified: time.Unix(1000, 0), Title: title, TrackNumber: i + 1,
+			Codec: "flac", SampleRate: 44100, Channels: 2,
+		})
+		if err != nil {
+			t.Fatalf("create track: %v", err)
+		}
+		ids = append(ids, tr.ID)
+	}
+
+	// When they are looked up together with an id that doesn't exist
+	got, err := repo.ListTrackSummaries(append(ids, 9999))
+	if err != nil {
+		t.Fatalf("ListTrackSummaries: %v", err)
+	}
+
+	// Then both come back with their album and artist, and the unknown id is skipped
+	if len(got) != 2 {
+		t.Fatalf("got %d summaries, want 2", len(got))
+	}
+	for _, s := range got {
+		if s.AlbumTitle != "Track Test Album" || s.ArtistName != "Track Test Artist" {
+			t.Errorf("track %d: album %q, artist %q", s.Track.ID, s.AlbumTitle, s.ArtistName)
+		}
+	}
+}

@@ -292,13 +292,6 @@ Given('Current track is about to end', async function (this: AudiodWorld) {
 	});
 });
 
-Given('Queue contains {string}, {string}', async function (
-	this: AudiodWorld, _track1: string, _track2: string
-) {
-	// TODO: Add tracks to queue via API when queue management is implemented
-	return 'pending';
-});
-
 Given('Queue contains tracks', async function (this: AudiodWorld) {
 	// Verify session has a source with remaining tracks
 	const page = this.getPage();

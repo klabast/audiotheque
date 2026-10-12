@@ -1,8 +1,8 @@
-@desktop @tablet @mobile @wip
+@desktop @tablet @mobile
 Feature: Play Next
   As a user
-  I want to add tracks to play next
-  So that I can hear specific songs after the current one
+  I want to put tracks right after the current one
+  So that I hear them next without losing the rest of my queue
 
   Background:
     Given System is in initial state
@@ -10,36 +10,15 @@ Feature: Play Next
     And Library "Test Music" exists with path "e2e/data/music"
     And User "alice" is logged in
     And Library "Test Music" scan is complete
-    And User is playing album "Test Album"
+    And User is playing album "Complete Test Album"
 
-  Scenario: User adds track to play next
-    Given Current track is "Test Track 1"
-    When User adds "Another Track" to play next
-    Then Queue contains "Another Track" at position 1
-    And Source remains album "Test Album"
+  Scenario: Play-next track goes to the front of the queue
+    Given Queue contains "Long Track 1"
+    When User adds track "Long Track 2" to play next
+    Then Queue order is "Long Track 2", "Long Track 1"
+    And Source remains album "Complete Test Album"
 
-  Scenario: Play next track plays before source
-    Given Current track is "Test Track 1"
-    And User has added "Another Track" to play next
-    When Current track finishes
-    Then Current track is "Another Track"
-    And Next track is "Test Track 2" from source
-
-  Scenario: Multiple play next tracks stack
-    Given Current track is "Test Track 1"
-    When User adds "Track A" to play next
-    And User adds "Track B" to play next
-    Then Queue order is "Track B", "Track A"
-    And "Track B" plays after current track
-
-  Scenario: Play next from album details
-    Given User is on album details page for "Complete Test Album"
-    When User adds track "Song X" to play next
-    Then Queue contains "Song X" at position 1
-    And User remains on album details page
-
-  Scenario: Play next entire album
-    Given Current track is "Test Track 1"
-    When User adds album "Another Album" to play next
-    Then Queue contains all tracks from "Another Album"
-    And Source remains album "Test Album"
+  Scenario: User plays a whole album next
+    Given Queue contains "Hi-Res Test Track"
+    When User adds album "Test Album - Multi Long" to play next
+    Then Queue order is "Long Track 1", "Long Track 2", "Hi-Res Test Track"

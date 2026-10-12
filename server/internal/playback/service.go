@@ -10,6 +10,9 @@ import (
 // TrackProvider provides access to tracks (from library)
 type TrackProvider interface {
 	GetAlbumTracks(userID, albumID int64) ([]Track, error)
+	// GetTracks returns the tracks in the order asked for, or ErrTrackNotFound
+	// if any of them doesn't exist or isn't accessible to the user.
+	GetTracks(userID int64, ids []int64) ([]Track, error)
 }
 
 // SessionRepository handles session persistence. There is at most one

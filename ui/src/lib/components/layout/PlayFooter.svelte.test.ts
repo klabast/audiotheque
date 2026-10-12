@@ -13,8 +13,7 @@ const clientIdListeners: Array<(id: string) => void> = [];
 
 vi.mock('$lib/services/api', () => ({
 	api: {
-		getAlbum: vi.fn().mockResolvedValue({ id: 1, title: 'A', artistName: 'X' }),
-		listAlbumTracks: vi.fn().mockResolvedValue([]),
+		lookupTracks: vi.fn().mockResolvedValue([]),
 		playAlbum: vi.fn(),
 		getPlaybackSession: vi.fn().mockResolvedValue(null),
 		subscribeToPlaybackSession: vi.fn(() => () => {}),
@@ -167,6 +166,56 @@ describe('PlayFooter — ended watchdog', () => {
 		expect(api.nextTrack).toHaveBeenCalledTimes(1);
 	});
 
+	it('does not advance a second time while the ended advance is still in flight', async () => {
+		// Given a local track that just ended
+		render(PlayFooter);
+		await new Promise((r) => setTimeout(r, 0));
+		assignClientId('tab-A');
+		playback.updateSession({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 5, position: 179 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [6, 7] }
+		});
+		await tick();
+		const audio = screen.getByTestId('audio-element') as HTMLAudioElement;
+		Object.defineProperty(audio, 'ended', { configurable: true, value: true });
+		vi.mocked(api.nextTrack).mockReturnValue(new Promise(() => {}));
+
+		// When the element reports ended and keeps ticking before the server answers
+		await fireEvent.ended(audio);
+		await fireEvent.timeUpdate(audio);
+
+		// Then only one advance is asked for
+		expect(api.nextTrack).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not advance again when ended follows the watchdog advance', async () => {
+		// Given a local track that just ended
+		render(PlayFooter);
+		await new Promise((r) => setTimeout(r, 0));
+		assignClientId('tab-A');
+		playback.updateSession({
+			state: 'playing',
+			deviceId: 'tab-A',
+			current: { trackId: 5, position: 179 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [6, 7] }
+		});
+		await tick();
+		const audio = screen.getByTestId('audio-element') as HTMLAudioElement;
+		Object.defineProperty(audio, 'ended', { configurable: true, value: true });
+		vi.mocked(api.nextTrack).mockReturnValue(new Promise(() => {}));
+
+		// When the browser reports the end through timeupdate first, then ended
+		await fireEvent.timeUpdate(audio);
+		await fireEvent.ended(audio);
+
+		// Then only one advance is asked for
+		expect(api.nextTrack).toHaveBeenCalledTimes(1);
+	});
+
 	it('fires at most once per track even across repeated timeupdate ticks', async () => {
 		render(PlayFooter);
 		await new Promise((r) => setTimeout(r, 0));
@@ -202,5 +251,41 @@ describe('PlayFooter — ended watchdog', () => {
 		await new Promise((r) => setTimeout(r, 0));
 
 		expect(api.nextTrack).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('PlayFooter — what is playing', () => {
+	it('shows a track queued from another album with that album', async () => {
+		// Given the current track came from the queue, not from the source album
+		const queued = {
+			id: 7,
+			title: 'Queued Song',
+			artistName: 'Queue Artist',
+			albumId: 3,
+			albumTitle: 'Other Album'
+		};
+		vi.mocked(api.lookupTracks).mockImplementation(async (ids: number[]) =>
+			ids.includes(queued.id) ? [queued] : []
+		);
+		render(PlayFooter);
+		await new Promise((r) => setTimeout(r, 0));
+
+		// When the session says it plays
+		playback.updateSession({
+			state: 'playing',
+			deviceId: 'mpd',
+			current: { trackId: 7, position: 0 },
+			queue: [],
+			source: { type: 'album', id: 100, remaining: [] }
+		});
+		await new Promise((r) => setTimeout(r, 0));
+		await tick();
+
+		// Then the footer names it and shows its own album's cover
+		const info = screen.getByTestId('player-footer');
+		expect(info).toHaveTextContent('Queued Song');
+		expect(info).toHaveTextContent('Other Album');
+		expect(api.lookupTracks).toHaveBeenCalledWith([7]);
+		expect(info.querySelector('img[src="/api/albums/3/cover"]')).not.toBeNull();
 	});
 });

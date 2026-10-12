@@ -4,7 +4,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import { AudPlayFooter } from '$lib/components/ui';
 	import { api } from '$lib/services/api';
-	import type { LibraryAlbumResponse, LibraryTrackResponse } from '$lib/api/client';
+	import { trackDetails } from '$lib/stores/track-details.svelte';
 
 	// === AUDIO ELEMENT ===
 	// Mounts/unmounts with the {#if !isRemote} guard, so it's reactive.
@@ -48,50 +48,18 @@
 		}
 	});
 
-	// Album metadata cache (keyed by album ID to avoid refetching on next/previous)
-	let cachedAlbumId = $state<number | null>(null);
-	let cachedAlbum = $state<LibraryAlbumResponse | null>(null);
-	let cachedTracks = $state<LibraryTrackResponse[]>([]);
-
-	// Derive album ID from session source
-	const albumId = $derived(
-		playback.session?.source?.type === 'album' ? (playback.session.source.id ?? null) : null
-	);
 	const currentTrackId = $derived(playback.session?.current?.trackId ?? null);
 
-	// Fetch album metadata when album ID changes
 	$effect(() => {
-		const id = albumId;
-		if (id === null) {
-			cachedAlbumId = null;
-			cachedAlbum = null;
-			cachedTracks = [];
-			return;
-		}
-		if (id === cachedAlbumId) return;
-
-		const fetchId = id;
-		Promise.all([api.getAlbum(fetchId), api.listAlbumTracks(fetchId)])
-			.then(([album, tracks]) => {
-				if (albumId === fetchId) {
-					cachedAlbumId = fetchId;
-					cachedAlbum = album;
-					cachedTracks = tracks;
-				}
-			})
-			.catch(() => {
-				// Silently fail — keep showing fallback values.
-			});
+		if (currentTrackId !== null) trackDetails.load([currentTrackId]);
 	});
 
-	const matchedTrack = $derived(
-		currentTrackId !== null ? (cachedTracks.find((t) => t.id === currentTrackId) ?? null) : null
-	);
+	const currentTrack = $derived(currentTrackId !== null ? trackDetails.get(currentTrackId) : null);
 
 	// Duration: audio element when local (sub-second granularity), track
 	// metadata (ms → s) when remote. Unified to seconds for the seek bar.
 	const duration = $derived(
-		isLocal && localDuration > 0 ? localDuration : (matchedTrack?.duration ?? 0) / 1000
+		isLocal && localDuration > 0 ? localDuration : (currentTrack?.duration ?? 0) / 1000
 	);
 
 	// currentTime: audio element when local (smooth), session.position when remote.
@@ -99,11 +67,13 @@
 	const currentTime = $derived(isLocal ? localCurrentTime : playback.position);
 
 	const trackTitle = $derived(
-		matchedTrack?.title ?? (currentTrackId !== null ? `Track ${currentTrackId}` : '--')
+		currentTrack?.title ?? (currentTrackId !== null ? `Track ${currentTrackId}` : '--')
 	);
-	const trackArtist = $derived(matchedTrack?.artistName ?? cachedAlbum?.artistName ?? '--');
-	const trackAlbum = $derived(cachedAlbum?.title ?? '');
-	const albumCover = $derived<string | null>(albumId ? `/api/albums/${albumId}/cover` : null);
+	const trackArtist = $derived(currentTrack?.artistName || '--');
+	const trackAlbum = $derived(currentTrack?.albumTitle ?? '');
+	const albumCover = $derived<string | null>(
+		currentTrack?.albumId ? `/api/albums/${currentTrack.albumId}/cover` : null
+	);
 
 	// activeDeviceName is empty for local playback — substitute the localized
 	// "This Device" label here, where paraglide is in scope.
@@ -115,23 +85,24 @@
 	const devices = $derived(playback.devices);
 	const currentDeviceId = $derived(playback.deviceId);
 
-	// === ENDED WATCHDOG ===
-	// Guards the primary "track ends, player hangs" failure mode: the
-	// `onended` handler on the <audio> element is the only advance trigger
-	// for local playback, and it can fail to fire or fail to advance (e.g.
-	// the session was briefly unresolvable during a WS reconnect, so
-	// onTrackEnded's next() no-ops). timeupdate keeps firing on some browsers
-	// even after the element reports ended, so it doubles as a second look:
-	// if the element says ended but the store still thinks this track is
-	// playing, force the advance once per track.
-	let watchdogFiredForTrack: number | null = null;
+	// === ADVANCING AT TRACK END ===
+	// The `onended` handler is the primary advance trigger for local playback.
+	// It can fail to fire or fail to advance (e.g. the session was briefly
+	// unresolvable during a WS reconnect), so timeupdate doubles as a watchdog:
+	// some browsers keep firing it after the element reports ended. Both paths
+	// go through advanceOnce, because browsers report the end through either
+	// event first and a second advance skips a track.
+	let advancedFromTrack: number | null = null;
+	function advanceOnce() {
+		const trackId = playback.currentTrackId;
+		if (trackId === null || advancedFromTrack === trackId) return;
+		advancedFromTrack = trackId;
+		playback.onTrackEnded();
+	}
+
 	function checkEndedWatchdog() {
 		if (!isLocal || !audioRef?.ended || !playback.isPlaying) return;
-		const trackId = playback.currentTrackId;
-		if (trackId === null || watchdogFiredForTrack === trackId) return;
-		watchdogFiredForTrack = trackId;
-		console.warn('[PlayFooter] ended watchdog: forcing advance — onended did not fire');
-		playback.onTrackEnded();
+		advanceOnce();
 	}
 
 	// === BACKEND POSITION REPORTING (browser-as-device only) ===
@@ -392,7 +363,7 @@
 		ontimeupdate={handleTimeUpdate}
 		onloadstart={handleLoadStart}
 		onloadedmetadata={handleLoadedMetadata}
-		onended={() => playback.onTrackEnded()}
+		onended={advanceOnce}
 		data-testid="audio-element"
 	></audio>
 {/if}

@@ -1,4 +1,4 @@
-@desktop @tablet @mobile @wip
+@desktop @tablet @mobile
 Feature: Queue Management
   As a user
   I want to manage my playback queue
@@ -10,40 +10,32 @@ Feature: Queue Management
     And Library "Test Music" exists with path "e2e/data/music"
     And User "alice" is logged in
     And Library "Test Music" scan is complete
-    And User is playing album "Test Album"
+    And User is playing album "Complete Test Album"
 
-  Scenario: User views queue
-    Given User has tracks in queue
-    When User opens queue view
-    Then Queue view shows explicit queue section
-    And Queue view shows source section
-    And Queue view shows playing from "Test Album"
+  Scenario: Queue shows where a track came from
+    Given Queue contains "Long Track 1"
+    When User opens queue sidebar
+    Then Queue shows "Long Track 1" from album "Test Album - Multi Long"
 
-  Scenario: User removes track from queue
-    Given Queue contains "Track A" and "Track B"
-    When User removes "Track A" from queue
-    Then Queue does not contain "Track A"
-    And Queue contains "Track B"
+  Scenario: User removes a track from the queue
+    Given Queue contains "Long Track 1", "Long Track 2"
+    When User removes "Long Track 1" from queue
+    Then Queue order is "Long Track 2"
 
-  Scenario: User clears queue
-    Given Queue contains multiple tracks
+  Scenario: User clears the queue
+    Given Queue contains "Long Track 1", "Long Track 2"
     When User clears queue
     Then Queue is empty
-    And Source remains album "Test Album"
-    And Music continues playing
+    And Source remains album "Complete Test Album"
+    And Music is playing
 
-  Scenario: User reorders queue
-    Given Queue contains "Track A", "Track B", "Track C"
-    When User moves "Track C" to position 1
-    Then Queue order is "Track C", "Track A", "Track B"
+  Scenario: User moves a track to the front
+    Given Queue contains "Long Track 1", "Long Track 2", "Hi-Res Test Track"
+    When User moves "Hi-Res Test Track" to position 1
+    Then Queue order is "Hi-Res Test Track", "Long Track 1", "Long Track 2"
 
-  Scenario: Queue shows track origin
-    Given Queue contains "Track A" from album "Album X"
-    When User opens queue view
-    Then Queue shows "Track A" with source "Album X"
-
-  Scenario: User can play track from queue immediately
-    Given Queue contains "Track A", "Track B"
-    When User plays "Track B" from queue
-    Then Current track is "Track B"
-    And "Track A" is removed from queue
+  Scenario: User jumps to a queued track
+    Given Queue contains "Long Track 1", "Long Track 2"
+    When User plays "Long Track 2" from queue
+    Then Now playing is "Long Track 2"
+    And Queue is empty

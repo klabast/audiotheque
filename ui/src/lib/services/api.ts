@@ -6,9 +6,11 @@ import {
 	playbackApi,
 	settingsApi,
 	systemApi,
+	tracksApi,
 	usersApi
 } from '$lib/api/client';
 import type {
+	PlaybackAddToQueueRequestPositionEnum,
 	PlaybackSessionResponse,
 	SettingsDevice as GeneratedSettingsDevice
 } from '$lib/api/client';
@@ -427,6 +429,61 @@ class ApiService {
 			return await playbackApi.transferPlayback({ request: { deviceId } }, this.clientIdOverride());
 		} catch (err) {
 			return this.rethrow(err, 'Failed to transfer playback');
+		}
+	}
+
+	/**
+	 * Look up tracks by id, with their album. Unknown or inaccessible ids are
+	 * left out of the result.
+	 */
+	async lookupTracks(ids: number[]) {
+		try {
+			return await tracksApi.lookupTracks({ request: { ids } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to look up tracks');
+		}
+	}
+
+	async addToQueue(
+		what: { trackIds: number[] } | { albumId: number },
+		position: PlaybackAddToQueueRequestPositionEnum
+	) {
+		try {
+			return await playbackApi.addToQueue({ request: { ...what, position } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to add to queue');
+		}
+	}
+
+	async removeFromQueue(itemId: string) {
+		try {
+			return await playbackApi.removeFromQueue({ itemId });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to remove from queue');
+		}
+	}
+
+	async clearQueue() {
+		try {
+			return await playbackApi.clearQueue();
+		} catch (err) {
+			return this.rethrow(err, 'Failed to clear queue');
+		}
+	}
+
+	async moveQueueItem(itemId: string, index: number) {
+		try {
+			return await playbackApi.moveQueueItem({ itemId, request: { index } });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to move queue item');
+		}
+	}
+
+	async playFromQueue(itemId: string) {
+		try {
+			return await playbackApi.playFromQueue({ itemId });
+		} catch (err) {
+			return this.rethrow(err, 'Failed to play from queue');
 		}
 	}
 

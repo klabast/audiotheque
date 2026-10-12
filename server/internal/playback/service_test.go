@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -93,6 +94,18 @@ func (m *mockTrackProvider) GetAlbumTracks(_, albumID int64) ([]Track, error) {
 		if t.AlbumID == albumID {
 			result = append(result, t)
 		}
+	}
+	return result, nil
+}
+
+func (m *mockTrackProvider) GetTracks(_ int64, ids []int64) ([]Track, error) {
+	result := make([]Track, 0, len(ids))
+	for _, id := range ids {
+		i := slices.IndexFunc(m.tracks, func(t Track) bool { return t.ID == id })
+		if i < 0 {
+			return nil, ErrTrackNotFound
+		}
+		result = append(result, m.tracks[i])
 	}
 	return result, nil
 }

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +31,9 @@ type mockService struct {
 	// accessErr, when set, is returned by every read path that enforces the
 	// library_access ACL, standing in for a caller without access.
 	accessErr error
+	// trackSummaries is what GetTracks returns; lookedUpIDs records the ask.
+	trackSummaries []*TrackSummary
+	lookedUpIDs    []int64
 }
 
 func (m *mockService) ListLibraries(userID int64) ([]*Library, error) {
@@ -718,5 +723,72 @@ func TestHandleGetAlbumCover_NoCover(t *testing.T) {
 	// Assert
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status 404 Not Found, got %d", w.Code)
+	}
+}
+
+func (m *mockService) GetTracks(userID int64, ids []int64) ([]*TrackSummary, error) {
+	m.lookedUpIDs = ids
+	return m.trackSummaries, nil
+}
+
+func TestHandleLookupTracks(t *testing.T) {
+	// Given a track the service can resolve
+	albumID := int64(3)
+	mockSvc := &mockService{trackSummaries: []*TrackSummary{{
+		Track:      &Track{ID: 7, AlbumID: &albumID, Title: "Seven", TrackNumber: 2, DiscNumber: 1, Duration: 1000},
+		ArtistName: "Artist",
+		AlbumTitle: "Album",
+	}}}
+	handler := &Handler{service: mockSvc, authService: createTestAuthService()}
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	// When the UI looks tracks up by id
+	req := httptest.NewRequest(http.MethodPost, "/api/tracks/lookup", strings.NewReader(`{"ids":[7,8]}`))
+	if err := addAuthCookie(req, 1); err != nil {
+		t.Fatalf("auth cookie: %v", err)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	// Then it gets each track with its album
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+	if !slices.Equal(mockSvc.lookedUpIDs, []int64{7, 8}) {
+		t.Errorf("looked up %v, want [7 8]", mockSvc.lookedUpIDs)
+	}
+	var got []TrackDetailResponse
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := []TrackDetailResponse{{
+		TrackResponse: TrackResponse{ID: 7, Title: "Seven", ArtistName: "Artist", TrackNumber: 2, DiscNumber: 1, Duration: 1000},
+		AlbumID:       3,
+		AlbumTitle:    "Album",
+	}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestHandleLookupTracks_RejectsBadBodies(t *testing.T) {
+	for _, body := range []string{`{}`, `{"ids":[]}`, `nope`} {
+		t.Run(body, func(t *testing.T) {
+			handler := &Handler{service: &mockService{}, authService: createTestAuthService()}
+			mux := http.NewServeMux()
+			handler.RegisterRoutes(mux)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/tracks/lookup", strings.NewReader(body))
+			if err := addAuthCookie(req, 1); err != nil {
+				t.Fatalf("auth cookie: %v", err)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400", w.Code)
+			}
+		})
 	}
 }

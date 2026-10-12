@@ -63,12 +63,26 @@ type SourceResponse struct {
 	Remaining []int64 `json:"remaining"`
 }
 
+// QueueOriginResponse is where a queued track was added from.
+type QueueOriginResponse struct {
+	Type string `json:"type"`
+	ID   int64  `json:"id"`
+}
+
+// QueueItemResponse is one entry of the explicit queue. ID addresses the entry
+// for remove, move and play; the same track can be queued more than once.
+type QueueItemResponse struct {
+	ID        string              `json:"id"`
+	TrackID   int64               `json:"trackId"`
+	AddedFrom QueueOriginResponse `json:"addedFrom"`
+}
+
 // SessionResponse is the JSON response for playback session
 type SessionResponse struct {
 	State              string                `json:"state"`
 	Current            *CurrentTrackResponse `json:"current,omitempty"`
 	Source             *SourceResponse       `json:"source,omitempty"`
-	Queue              []int64               `json:"queue"`
+	Queue              []QueueItemResponse   `json:"queue"`
 	DeviceID           string                `json:"deviceId,omitempty"`
 	DeviceVolumes      map[string]int        `json:"deviceVolumes,omitempty"`
 	DeviceCapabilities *DeviceCapabilities   `json:"deviceCapabilities,omitempty"`
@@ -104,6 +118,12 @@ type ServiceInterface interface {
 	TransferPlayback(userID int64, targetDeviceID string) (*Session, error)
 	SeekTrack(userID int64, position int) (*Session, error)
 	SetVolume(userID int64, volume int) (*Session, error)
+	AddTracksToQueue(userID int64, trackIDs []int64, position QueuePosition) (*Session, error)
+	AddAlbumToQueue(userID, albumID int64, position QueuePosition) (*Session, error)
+	RemoveFromQueue(userID int64, itemID string) (*Session, error)
+	ClearQueue(userID int64) (*Session, error)
+	MoveQueueItem(userID int64, itemID string, to int) (*Session, error)
+	PlayFromQueue(userID int64, itemID string) (*Session, error)
 	// DeviceCapabilities reports what the named device can do. Device I/O
 	// belongs to the service, which owns the resolver.
 	DeviceCapabilities(deviceID string) *DeviceCapabilities
@@ -192,6 +212,14 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, "Playback device is unreachable", http.StatusBadGateway)
 	case errors.Is(err, ErrAccessDenied):
 		http.Error(w, "Access denied", http.StatusForbidden)
+	case errors.Is(err, ErrQueueItemNotFound):
+		http.Error(w, "Queue item not found", http.StatusNotFound)
+	case errors.Is(err, ErrTrackNotFound), errors.Is(err, library.ErrTrackNotFound):
+		http.Error(w, "Track not found", http.StatusNotFound)
+	case errors.Is(err, library.ErrAlbumNotFound):
+		http.Error(w, "Album not found", http.StatusNotFound)
+	case errors.Is(err, library.ErrLibraryAccessDenied):
+		http.Error(w, "Access denied", http.StatusForbidden)
 	default:
 		http.Error(w, "Playback operation failed", http.StatusInternalServerError)
 	}
@@ -208,6 +236,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/playback/transfer", h.HandleTransfer)
 	mux.HandleFunc("POST /api/playback/seek", h.HandleSeek)
 	mux.HandleFunc("POST /api/playback/volume", h.HandleVolume)
+	mux.HandleFunc("POST /api/playback/queue", h.HandleAddToQueue)
+	mux.HandleFunc("DELETE /api/playback/queue", h.HandleClearQueue)
+	mux.HandleFunc("DELETE /api/playback/queue/{itemId}", h.HandleRemoveFromQueue)
+	mux.HandleFunc("POST /api/playback/queue/{itemId}/move", h.HandleMoveQueueItem)
+	mux.HandleFunc("POST /api/playback/queue/{itemId}/play", h.HandlePlayFromQueue)
 	mux.HandleFunc("GET /api/devices", h.HandleListDevices)
 	mux.HandleFunc("GET /api/tracks/{id}/stream", h.HandleStreamTrack)
 }
@@ -352,7 +385,7 @@ func (h *Handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 func SessionToResponse(s *Session, caps CapabilitiesFn) SessionResponse {
 	resp := SessionResponse{
 		State:         string(s.State),
-		Queue:         make([]int64, len(s.Queue)),
+		Queue:         make([]QueueItemResponse, len(s.Queue)),
 		DeviceID:      s.DeviceID,
 		DeviceVolumes: s.DeviceVolumes,
 	}
@@ -371,7 +404,11 @@ func SessionToResponse(s *Session, caps CapabilitiesFn) SessionResponse {
 	}
 
 	for i, q := range s.Queue {
-		resp.Queue[i] = q.TrackID
+		resp.Queue[i] = QueueItemResponse{
+			ID:        q.ID,
+			TrackID:   q.TrackID,
+			AddedFrom: QueueOriginResponse{Type: string(q.AddedFrom), ID: q.AddedFromID},
+		}
 	}
 
 	if caps != nil && s.DeviceID != "" {

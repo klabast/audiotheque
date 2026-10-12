@@ -4,7 +4,7 @@
 	import { playback } from '$lib/stores/playback.svelte';
 	import { Button } from '$lib/components/ui';
 	import { formatDuration } from '$lib/utils/format';
-	import { ArrowLeft, Pause, Play } from 'lucide-svelte';
+	import { ArrowLeft, ListEnd, ListStart, Pause, Play } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let album = $state<LibraryAlbumResponse | null>(null);
@@ -99,9 +99,16 @@
 		await playTrack(trackId);
 	}
 
-	// TODO(queue-actions): wire up album favorite, AddToQueue, PlayNext,
-	// share, more menu, DirtyQueueDialog. The v1 album page had these — they
-	// depend on backend endpoints + UI components that aren't ported yet.
+	// Queueing needs something playing to queue behind.
+	const canQueue = $derived(playback.hasSession);
+
+	async function queue(action: () => Promise<void>) {
+		try {
+			await action();
+		} catch (e) {
+			console.error('Failed to queue:', e);
+		}
+	}
 </script>
 
 <div class="min-h-screen" data-testid="album-details">
@@ -207,6 +214,25 @@
 							<Play class="h-4 w-4" fill="currentColor" />
 							{m['playback.play']()} Album
 						</button>
+						{#if canQueue && album.id !== undefined}
+							{@const albumId = album.id}
+							<button
+								onclick={() => queue(() => playback.playNext({ albumId }))}
+								class="text-text-secondary hover:text-text-primary hover:bg-surface-hover flex items-center gap-2 rounded-full px-4 py-2 text-sm"
+								data-testid="play-album-next-button"
+							>
+								<ListStart class="h-4 w-4" />
+								{m['playback.play_next']()}
+							</button>
+							<button
+								onclick={() => queue(() => playback.addToQueue({ albumId }))}
+								class="text-text-secondary hover:text-text-primary hover:bg-surface-hover flex items-center gap-2 rounded-full px-4 py-2 text-sm"
+								data-testid="add-album-to-queue-button"
+							>
+								<ListEnd class="h-4 w-4" />
+								{m['playback.add_to_queue']()}
+							</button>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -221,62 +247,92 @@
 				{@const playing = isTrackPlaying(track.id)}
 				{@const paused = isTrackPaused(track.id)}
 				{@const current = isTrackCurrent(track.id)}
-				<button
-					type="button"
-					onclick={() => handleRowClick(track.id)}
-					class="group hover:bg-surface-hover flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left {current
+				<div
+					class="group hover:bg-surface-hover flex items-center pr-2 {current
 						? 'bg-surface-hover'
 						: ''}"
-					data-testid="track-row-{track.id}"
-					aria-label={playing
-						? m['playback.pause']()
-						: `${m['playback.play']()} ${track.title ?? ''}`}
+					data-testid="track-item-{track.id}"
 				>
-					<!-- Number / play icon swap -->
-					<span class="relative flex w-8 flex-shrink-0 items-center justify-center text-sm">
-						{#if playing}
-							<Pause
-								class="text-action h-4 w-4"
-								fill="currentColor"
-								data-testid="track-play-button-{track.id}"
-							/>
-						{:else if paused}
-							<Play
-								class="text-action h-4 w-4"
-								fill="currentColor"
-								data-testid="track-play-button-{track.id}"
-							/>
-						{:else}
-							<span
-								class="text-text-secondary group-hover:opacity-0 {current ? 'text-action' : ''}"
-							>
-								{track.trackNumber || index + 1}
-							</span>
-							<Play
-								class="text-text-primary absolute h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100"
-								fill="currentColor"
-								data-testid="track-play-button-{track.id}"
-							/>
-						{/if}
-					</span>
+					<button
+						type="button"
+						onclick={() => handleRowClick(track.id)}
+						class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 py-2 text-left"
+						data-testid="track-row-{track.id}"
+						aria-label={playing
+							? m['playback.pause']()
+							: `${m['playback.play']()} ${track.title ?? ''}`}
+					>
+						<!-- Number / play icon swap -->
+						<span class="relative flex w-8 flex-shrink-0 items-center justify-center text-sm">
+							{#if playing}
+								<Pause
+									class="text-action h-4 w-4"
+									fill="currentColor"
+									data-testid="track-play-button-{track.id}"
+								/>
+							{:else if paused}
+								<Play
+									class="text-action h-4 w-4"
+									fill="currentColor"
+									data-testid="track-play-button-{track.id}"
+								/>
+							{:else}
+								<span
+									class="text-text-secondary group-hover:opacity-0 {current ? 'text-action' : ''}"
+								>
+									{track.trackNumber || index + 1}
+								</span>
+								<Play
+									class="text-text-primary absolute h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100"
+									fill="currentColor"
+									data-testid="track-play-button-{track.id}"
+								/>
+							{/if}
+						</span>
 
-					<!-- Title + artist -->
-					<div class="min-w-0 flex-1">
-						<p class="truncate font-medium {current ? 'text-action' : 'text-text-primary'}">
-							{track.title}
-						</p>
-						{#if track.artistName && track.artistName !== album.artistName}
-							<p class="text-text-secondary truncate text-sm">
-								{track.artistName}
+						<!-- Title + artist -->
+						<div class="min-w-0 flex-1">
+							<p class="truncate font-medium {current ? 'text-action' : 'text-text-primary'}">
+								{track.title}
 							</p>
-						{/if}
-					</div>
+							{#if track.artistName && track.artistName !== album.artistName}
+								<p class="text-text-secondary truncate text-sm">
+									{track.artistName}
+								</p>
+							{/if}
+						</div>
 
-					<!-- Duration -->
-					<span class="text-text-secondary flex-shrink-0 text-sm">
-						{formatDuration(track.duration || 0)}
-					</span>
-				</button>
+						<!-- Duration -->
+						<span class="text-text-secondary flex-shrink-0 text-sm">
+							{formatDuration(track.duration || 0)}
+						</span>
+					</button>
+					{#if canQueue && track.id !== undefined}
+						{@const trackIds = [track.id]}
+						<div
+							class="flex flex-shrink-0 items-center md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+						>
+							<button
+								type="button"
+								onclick={() => queue(() => playback.playNext({ trackIds }))}
+								class="text-text-secondary hover:text-text-primary rounded p-2"
+								aria-label="{m['playback.play_next']()}: {track.title ?? ''}"
+								data-testid="track-play-next-button-{track.id}"
+							>
+								<ListStart class="h-4 w-4" />
+							</button>
+							<button
+								type="button"
+								onclick={() => queue(() => playback.addToQueue({ trackIds }))}
+								class="text-text-secondary hover:text-text-primary rounded p-2"
+								aria-label="{m['playback.add_to_queue']()}: {track.title ?? ''}"
+								data-testid="track-add-to-queue-button-{track.id}"
+							>
+								<ListEnd class="h-4 w-4" />
+							</button>
+						</div>
+					{/if}
+				</div>
 			{/each}
 		</div>
 	{/if}
