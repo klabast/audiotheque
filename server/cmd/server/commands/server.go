@@ -8,6 +8,7 @@ import (
 	"audiod/internal/jobs"
 	"audiod/internal/library"
 	"audiod/internal/playback"
+	"audiod/internal/plays"
 	"audiod/internal/scanner"
 	"audiod/internal/server"
 	"audiod/internal/settings"
@@ -135,6 +136,7 @@ func startServer() error {
 	sessionRepo := playback.NewDBSessionRepository(db)
 	trackProvider := playback.NewLibraryTrackProvider(libraryService)
 	playbackService := playback.NewService(trackProvider, sessionRepo)
+	playbackService.SetPlayRecorder(plays.NewRepository(db))
 
 	// Migration: under the unified-session invariant every session names a
 	// real playback device. Sweep any pre-invariant rows so they don't

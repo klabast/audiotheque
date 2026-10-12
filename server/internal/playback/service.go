@@ -29,6 +29,11 @@ type SessionRepository interface {
 	DeleteWithoutDevice() (int64, error)
 }
 
+// PlayRecorder logs how long a track played before playback moved on.
+type PlayRecorder interface {
+	RecordPlay(userID, trackID int64, playedSeconds int) error
+}
+
 // ErrNoDevice signals that an operation requires an active playback device
 // but the session doesn't name one. The handler maps this to 409 Conflict.
 var ErrNoDevice = errors.New("no playback device assigned to session")
@@ -56,6 +61,7 @@ type Service struct {
 	deviceResolver DeviceResolver
 	streamURL      StreamURLBuilder
 	broadcaster    SessionBroadcaster
+	plays          PlayRecorder
 	logger         *slog.Logger
 
 	// mpdUsers tracks which users currently have a playing session on an MPD
@@ -108,6 +114,10 @@ func (s *Service) SetStreamURLBuilder(builder StreamURLBuilder) {
 
 func (s *Service) SetBroadcaster(b SessionBroadcaster) {
 	s.broadcaster = b
+}
+
+func (s *Service) SetPlayRecorder(r PlayRecorder) {
+	s.plays = r
 }
 
 // persistAndBroadcast saves the session, updates poller bookkeeping, and
@@ -207,6 +217,7 @@ func (s *Service) PlayAlbumOnDevice(userID, albumID, startTrackID int64, deviceI
 	// named by any session, can never be reached again. Stopping after the new
 	// device accepted the play keeps a failed play from silencing everything.
 	s.stopPreviousDevice(previous, deviceID)
+	s.recordPlay(previous)
 
 	if err := s.persistAndBroadcast(session); err != nil {
 		return nil, err
@@ -375,6 +386,8 @@ func (s *Service) nextLocked(userID int64) (*Session, error) {
 		return nil, ErrNoSession
 	}
 
+	s.recordPlay(session)
+
 	// Add current track to history (if exists)
 	if session.Current != nil {
 		session.History = append(session.History, session.Current.TrackID)
@@ -417,6 +430,17 @@ func (s *Service) nextLocked(userID int64) (*Session, error) {
 	}
 
 	return session, nil
+}
+
+// recordPlay logs how long the current track played. Callers run it just
+// before the track is replaced; a failing log never holds up playback.
+func (s *Service) recordPlay(session *Session) {
+	if s.plays == nil || session == nil || session.Current == nil || session.IsPrivate {
+		return
+	}
+	if err := s.plays.RecordPlay(session.UserID, session.Current.TrackID, session.Current.Position); err != nil {
+		s.logger.Warn("record play failed", "userID", session.UserID, "trackID", session.Current.TrackID, "error", err)
+	}
 }
 
 // stopDevice tells the session's device to stop. Best-effort — a device we
@@ -469,6 +493,7 @@ func (s *Service) Previous(userID int64) (*Session, error) {
 		return nil, ErrNoSession
 	}
 
+	s.recordPlay(session)
 	if len(session.History) > 0 {
 		// Get previous track from history
 		prevTrackID := session.History[len(session.History)-1]

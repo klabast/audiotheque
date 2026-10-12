@@ -34,6 +34,7 @@ func (r *sqliteRepository) ResetAll() error {
 	// preserved — the schema itself isn't being reset, only data.
 	tables := []string{
 		"playback_session",
+		"play",
 		"reset_code",
 		"scan_queue",
 		"track_artist",
