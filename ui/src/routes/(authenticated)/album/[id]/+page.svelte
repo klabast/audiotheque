@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { api, type LibraryAlbumResponse, type LibraryTrackResponse } from '$lib/services/api';
 	import { playback } from '$lib/stores/playback.svelte';
 	import { Button } from '$lib/components/ui';
@@ -13,7 +13,7 @@
 	let error = $state<string | null>(null);
 
 	$effect(() => {
-		const albumId = Number($page.params.id);
+		const albumId = Number(page.params.id);
 		if (albumId) {
 			loadAlbumData(albumId);
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import {
 		api,
 		type LibraryLibraryResponse,
@@ -48,8 +48,8 @@
 	let pendingScrollTop = $state<number | null>(null);
 	let lastKnownScrollTop = 0;
 
-	let hiResOnly = $derived($page.url.searchParams.get('hiRes') === 'true');
-	let sortLevels = $derived(parseSort($page.url.searchParams.get('sort')));
+	let hiResOnly = $derived(page.url.searchParams.get('hiRes') === 'true');
+	let sortLevels = $derived(parseSort(page.url.searchParams.get('sort')));
 	let isAdmin = $derived(auth.user?.isAdmin ?? false);
 	let showYear = $derived(
 		sortLevels[0]?.field === 'album-artist' && sortLevels[1]?.field === 'year'
@@ -60,9 +60,9 @@
 		return prefix && /^\d{4}$/.test(prefix) ? prefix : undefined;
 	}
 
-	let query = $derived($page.url.searchParams.get('q') ?? '');
+	let query = $derived(page.url.searchParams.get('q') ?? '');
 	let hasQuery = $derived(query.trim().length > 0);
-	let scope = $derived(parseScope($page.url.searchParams.get('scope')));
+	let scope = $derived(parseScope(page.url.searchParams.get('scope')));
 
 	function parseScope(raw: string | null): SearchScope {
 		return (SEARCH_SCOPES as string[]).includes(raw ?? '') ? (raw as SearchScope) : 'albums';
@@ -71,8 +71,7 @@
 	function setScope(next: SearchScope) {
 		goto(buildQueryString({ scope: next === 'albums' ? null : next }), {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	}
 
@@ -148,8 +147,7 @@
 	function setSort(next: SortLevel[]) {
 		goto(buildQueryString({ sort: serializeSort(next) }), {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	}
 
@@ -159,7 +157,7 @@
 		for (const [k, v] of Object.entries(updates)) {
 			if (v !== null) params.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
 		}
-		for (const [k, v] of $page.url.searchParams.entries()) {
+		for (const [k, v] of page.url.searchParams.entries()) {
 			if (!overridden.includes(k)) params.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
 		}
 		return params.length > 0 ? `?${params.join('&')}` : '?';
@@ -226,8 +224,7 @@
 	function toggleHiRes() {
 		goto(buildQueryString({ hiRes: hiResOnly ? null : 'true' }), {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	}
 

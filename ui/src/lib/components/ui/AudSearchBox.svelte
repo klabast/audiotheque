@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { Search, X } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
 
@@ -11,8 +11,8 @@
 	let localDraft = $state('');
 	let inputEl: HTMLInputElement | null = $state(null);
 
-	const isHome = $derived($page.url.pathname === '/');
-	const urlQuery = $derived(isHome ? ($page.url.searchParams.get('q') ?? '') : '');
+	const isHome = $derived(page.url.pathname === '/');
+	const urlQuery = $derived(isHome ? (page.url.searchParams.get('q') ?? '') : '');
 	const displayValue = $derived(isHome ? urlQuery : localDraft);
 
 	onMount(() => {
@@ -47,13 +47,12 @@
 		const dropped = value ? ['q'] : ['q', 'scope'];
 		const parts: string[] = [];
 		if (value) parts.push(`q=${encodeURIComponent(value)}`);
-		for (const [k, v] of $page.url.searchParams.entries()) {
+		for (const [k, v] of page.url.searchParams.entries()) {
 			if (!dropped.includes(k)) parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
 		}
 		goto(parts.length > 0 ? `?${parts.join('&')}` : '?', {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	}
 

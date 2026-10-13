@@ -2,7 +2,7 @@
 	import { Alert, Button, Label } from '$lib/components/ui';
 	import { APP_NAME } from '$lib/branding';
 	import { themeStore } from '$lib/stores/theme.svelte';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages';
 

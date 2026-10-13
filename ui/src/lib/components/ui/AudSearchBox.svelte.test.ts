@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
-import { writable } from 'svelte/store';
 import AudSearchBox from './AudSearchBox.svelte';
 
-const pageStore = writable({ url: new URL('http://localhost/') });
-
-vi.mock('$app/stores', () => ({
-	page: {
-		subscribe: (fn: (value: { url: URL }) => void) => pageStore.subscribe(fn)
-	}
-}));
+const page = vi.hoisted(() => ({ url: new URL('http://localhost/') }));
+vi.mock('$app/state', () => ({ page }));
 
 const goto = vi.fn().mockResolvedValue(undefined);
 vi.mock('$app/navigation', () => ({
@@ -18,7 +12,7 @@ vi.mock('$app/navigation', () => ({
 }));
 
 function setUrl(url: string) {
-	pageStore.set({ url: new URL(url) });
+	page.url = new URL(url);
 }
 
 describe('AudSearchBox', () => {
@@ -43,8 +37,7 @@ describe('AudSearchBox', () => {
 
 		expect(goto).toHaveBeenCalledWith('?q=solace', {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	});
 
@@ -69,8 +62,7 @@ describe('AudSearchBox', () => {
 
 		expect(goto).toHaveBeenCalledWith('?', {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	});
 
@@ -82,8 +74,7 @@ describe('AudSearchBox', () => {
 
 		expect(goto).toHaveBeenCalledWith('?', {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	});
 
@@ -96,8 +87,7 @@ describe('AudSearchBox', () => {
 
 		expect(goto).toHaveBeenCalledWith('?q=daft&hiRes=true', {
 			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+			reset: false
 		});
 	});
 });

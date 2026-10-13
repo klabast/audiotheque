@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
-import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
-vi.mock('$app/stores', () => ({
-	page: readable({ params: { id: '42' } })
+vi.mock('$app/state', () => ({
+	page: { params: { id: '42' } }
 }));
 
 vi.mock('$lib/services/api', () => ({

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import '../app.css';
 	import 'virtual:uno.css';
 
@@ -8,9 +8,9 @@
 
 	// Redirect to init if required (unless already on init page)
 	$effect(() => {
-		if (data.setupRequired && $page.url.pathname !== '/init') {
+		if (data.setupRequired && page.url.pathname !== '/init') {
 			goto('/init');
-		} else if (!data.setupRequired && $page.url.pathname === '/init') {
+		} else if (!data.setupRequired && page.url.pathname === '/init') {
 			// If trying to access init when not required, redirect to login
 			goto('/login');
 		}

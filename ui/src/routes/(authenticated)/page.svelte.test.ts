@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
-import { writable } from 'svelte/store';
 import Page from './+page.svelte';
 
 // jsdom has no ResizeObserver — the page observes its grid container to
@@ -13,13 +12,9 @@ class ResizeObserverStub {
 }
 vi.stubGlobal('ResizeObserver', ResizeObserverStub);
 
-const pageStore = writable({ url: new URL('http://localhost/') });
+const page = vi.hoisted(() => ({ url: new URL('http://localhost/') }));
 
-vi.mock('$app/stores', () => ({
-	page: {
-		subscribe: (fn: (value: { url: URL }) => void) => pageStore.subscribe(fn)
-	}
-}));
+vi.mock('$app/state', () => ({ page }));
 
 const goto = vi.fn().mockResolvedValue(undefined);
 vi.mock('$app/navigation', () => ({
@@ -55,7 +50,7 @@ const albums = [
 ];
 
 function setUrl(search: string) {
-	pageStore.set({ url: new URL(`http://localhost/${search}`) });
+	page.url = new URL(`http://localhost/${search}`);
 }
 
 describe('Library page — search filtering', () => {
