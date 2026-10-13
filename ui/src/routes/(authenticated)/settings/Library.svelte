@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { api } from '$lib/services/api';
-	import { scan } from '$lib/stores/scan.svelte';
-	import { Button, ConfirmDeleteModal } from '$lib/components/ui';
-	import type { LibraryLibraryResponse } from '$lib/api/generated/src';
-	import * as m from '$lib/paraglide/messages';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { api } from '#lib/services/api';
+	import { scan } from '#lib/stores/scan.svelte';
+	import { Button, ConfirmDeleteModal } from '#lib/components/ui';
+	import type { LibraryLibraryResponse } from '#lib/api/generated/src';
+	import * as m from '#lib/paraglide/messages';
 	import LibraryCreateForm from './LibraryCreateForm.svelte';
 	import LibraryItem from './LibraryItem.svelte';
 	import LibraryEditModal from './LibraryEditModal.svelte';

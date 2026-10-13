@@ -7,22 +7,22 @@
 		type LibraryLibraryResponse,
 		type LibraryAlbumResponse,
 		type LibrarySearchTrackResult
-	} from '$lib/services/api';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { scan } from '$lib/stores/scan.svelte';
-	import { APP_NAME } from '$lib/branding';
-	import * as m from '$lib/paraglide/messages';
-	import { Button, AudAlbumCard } from '$lib/components/ui';
-	import { playback } from '$lib/stores/playback.svelte';
-	import { getMainScrollContainer } from '$lib/utils/scroll-restoration';
-	import { matchesQuery } from '$lib/utils/text-match';
+	} from '#lib/services/api';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { scan } from '#lib/stores/scan.svelte';
+	import { APP_NAME } from '#lib/branding';
+	import * as m from '#lib/paraglide/messages';
+	import { Button, AudAlbumCard } from '#lib/components/ui';
+	import { playback } from '#lib/stores/playback.svelte';
+	import { getMainScrollContainer } from '#lib/utils/scroll-restoration';
+	import { matchesQuery } from '#lib/utils/text-match';
 	import {
 		SORT_FIELDS,
 		DEFAULT_SORT,
 		type SortField,
 		type SortDir,
 		type SortLevel
-	} from '$lib/utils/validation';
+	} from '#lib/utils/validation';
 	import { Zap, ArrowUp, ArrowDown, Play } from 'lucide-svelte';
 	import { createVirtualizer } from '@tanstack/svelte-virtual';
 

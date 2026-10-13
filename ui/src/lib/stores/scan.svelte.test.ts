@@ -13,7 +13,7 @@ function setupApiMock() {
 	const scanProgressListeners: WsCb[] = [];
 	const libraryUpdatedListeners: WsCb[] = [];
 
-	vi.doMock('$lib/services/api', () => ({
+	vi.doMock('#lib/services/api', () => ({
 		api: {
 			subscribeToAllScanProgress: vi.fn((cb: WsCb) => {
 				scanProgressListeners.push(cb);
@@ -53,7 +53,7 @@ describe('scan store — lazy WebSocket subscription', () => {
 	it('does not call api.subscribe* at module load', async () => {
 		setupApiMock();
 		await import('./scan.svelte');
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		expect(api.subscribeToAllScanProgress).not.toHaveBeenCalled();
 		expect(api.subscribeToLibraryUpdated).not.toHaveBeenCalled();
 	});
@@ -61,7 +61,7 @@ describe('scan store — lazy WebSocket subscription', () => {
 	it('subscribes once start() is called', async () => {
 		setupApiMock();
 		const { scan } = await import('./scan.svelte');
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		scan.start();
 		expect(api.subscribeToAllScanProgress).toHaveBeenCalledTimes(1);
 		expect(api.subscribeToLibraryUpdated).toHaveBeenCalledTimes(1);
@@ -70,7 +70,7 @@ describe('scan store — lazy WebSocket subscription', () => {
 	it('subsequent start() calls are no-ops (idempotent)', async () => {
 		setupApiMock();
 		const { scan } = await import('./scan.svelte');
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		scan.start();
 		scan.start();
 		scan.start();

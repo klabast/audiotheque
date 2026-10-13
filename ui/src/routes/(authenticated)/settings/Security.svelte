@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/services/api';
-	import type { AuthSessionInfo } from '$lib/api/generated/src';
-	import { Alert, Button, SudoConfirmModal } from '$lib/components/ui';
+	import { api } from '#lib/services/api';
+	import type { AuthSessionInfo } from '#lib/api/generated/src';
+	import { Alert, Button, SudoConfirmModal } from '#lib/components/ui';
 	import { X } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
-	import { APP_NAME } from '$lib/branding';
-	import { auth } from '$lib/stores/auth.svelte';
+	import * as m from '#lib/paraglide/messages';
+	import { APP_NAME } from '#lib/branding';
+	import { auth } from '#lib/stores/auth.svelte';
 
 	// Active Devices is per-user (non-admins see this fine). The Authentication
 	// toggle below is admin-only and hidden for everyone else so we don't

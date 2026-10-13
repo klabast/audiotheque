@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, Input, Label } from '$lib/components/ui';
+	import { Button, Input, Label } from '#lib/components/ui';
 
 	interface Props {
 		isOpen: boolean;

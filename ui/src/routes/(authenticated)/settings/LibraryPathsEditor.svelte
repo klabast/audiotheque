@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, Input } from '$lib/components/ui';
+	import { Button, Input } from '#lib/components/ui';
 
 	interface Props {
 		paths: string[];

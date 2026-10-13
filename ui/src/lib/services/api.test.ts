@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
-import * as client from '$lib/api/client';
+import * as client from '#lib/api/client';
 
-vi.mock('$lib/api/client', () => ({
+vi.mock('#lib/api/client', () => ({
 	systemApi: {
 		getSystemStatus: vi.fn()
 	},

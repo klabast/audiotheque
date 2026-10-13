@@ -12,11 +12,11 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [
-			UnoCSS(),
+			// SvelteKit never runs transformIndexHtml; styles load via `virtual:uno.css`
+			...UnoCSS().map(({ transformIndexHtml: _, ...plugin }) => plugin),
 			sveltekit({
 				preprocess: vitePreprocess(),
 				adapter: adapter({ fallback: 'index.html' }),
-				alias: { $lib: 'src/lib' },
 				prerender: {
 					handleHttpError: 'ignore',
 					handleMissingId: 'ignore'

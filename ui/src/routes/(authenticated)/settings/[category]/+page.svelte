@@ -2,9 +2,9 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Tabs, Alert, type TabItem } from '$lib/components/ui';
-	import { auth } from '$lib/stores/auth.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { Tabs, Alert, type TabItem } from '#lib/components/ui';
+	import { auth } from '#lib/stores/auth.svelte';
+	import * as m from '#lib/paraglide/messages';
 	import Account from '../Account.svelte';
 	import General from '../General.svelte';
 	import Library from '../Library.svelte';

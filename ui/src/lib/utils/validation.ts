@@ -2,7 +2,7 @@
  * Centralized validation rules for the application
  */
 
-import * as m from '$lib/paraglide/messages';
+import * as m from '#lib/paraglide/messages';
 
 // Mirrors server/internal/auth/validation.go — frontend and backend must
 // stay in sync on these limits.

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { Alert, Button, Label } from '$lib/components/ui';
-	import { APP_NAME } from '$lib/branding';
-	import { themeStore } from '$lib/stores/theme.svelte';
+	import { Alert, Button, Label } from '#lib/components/ui';
+	import { APP_NAME } from '#lib/branding';
+	import { themeStore } from '#lib/stores/theme.svelte';
 	import { browser } from '$app/env';
 	import { onMount } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
+	import * as m from '#lib/paraglide/messages';
 
 	let selectedTheme = $state(themeStore.current);
 	let selectedLanguage = $state('en');

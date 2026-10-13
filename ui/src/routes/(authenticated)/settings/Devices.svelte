@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { api, type SettingsDevice } from '$lib/services/api';
-	import { Alert, Button, ConfirmDeleteModal, Input, Label } from '$lib/components/ui';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { api, type SettingsDevice } from '#lib/services/api';
+	import { Alert, Button, ConfirmDeleteModal, Input, Label } from '#lib/components/ui';
 	import { Pencil, Trash2 } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
+	import * as m from '#lib/paraglide/messages';
 
 	let devices: SettingsDevice[] = $state([]);
 	let loading = $state(true);

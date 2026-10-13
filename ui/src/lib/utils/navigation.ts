@@ -9,7 +9,7 @@ import { resolve } from '$app/paths';
 // Navigation functions - use these for programmatic navigation
 export const navigation = {
 	goToLogin: () => goto(resolve('/(public)/login')),
-	goToHome: () => goto(resolve('/')),
+	goToHome: () => goto(resolve('/(authenticated)')),
 	goToSettings: () => goto(resolve('/(authenticated)/settings')),
 	goToSettingsAccount: () =>
 		goto(resolve('/(authenticated)/settings/[category]', { category: 'account' })),
@@ -20,7 +20,7 @@ export const navigation = {
 // Pre-resolved routes - use these for href attributes
 export const routes = {
 	login: resolve('/(public)/login'),
-	home: resolve('/'),
+	home: resolve('/(authenticated)'),
 	settings: resolve('/(authenticated)/settings'),
 	stats: resolve('/(authenticated)/stats'),
 	settingsAccount: resolve('/(authenticated)/settings/[category]', { category: 'account' }),

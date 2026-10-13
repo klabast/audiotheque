@@ -1,5 +1,5 @@
-import { api, type DeviceInfo } from '$lib/services/api';
-import type { PlaybackSessionResponse } from '$lib/api/client';
+import { api, type DeviceInfo } from '#lib/services/api';
+import type { PlaybackSessionResponse } from '#lib/api/client';
 
 /**
  * Playback Store — Backend-Authoritative

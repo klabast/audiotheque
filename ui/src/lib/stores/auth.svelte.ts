@@ -2,7 +2,7 @@
  * Auth store - Svelte 5 runes-based authentication state management
  *
  * Usage in components:
- *   import { auth } from '$lib/stores/auth.svelte';
+ *   import { auth } from '#lib/stores/auth.svelte';
  *
  *   // Read state (reactive via $state/$derived)
  *   auth.user
@@ -14,8 +14,8 @@
  *   await auth.logout();
  */
 
-import { type AuthError, AuthService } from '$lib/services/authService';
-import type { AuthUserResponse } from '$lib/api/client';
+import { type AuthError, AuthService } from '#lib/services/authService';
+import type { AuthUserResponse } from '#lib/api/client';
 
 // Service instance (private to this module)
 const authService = new AuthService();

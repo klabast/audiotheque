@@ -5,8 +5,8 @@
 	import LeftDrawer from './LeftDrawer.svelte';
 	import RightSidebar from './RightSidebar.svelte';
 	import PlayFooter from './PlayFooter.svelte';
-	import QueuePanel from '$lib/components/QueuePanel.svelte';
-	import { scan } from '$lib/stores/scan.svelte';
+	import QueuePanel from '#lib/components/QueuePanel.svelte';
+	import { scan } from '#lib/stores/scan.svelte';
 
 	interface Props {
 		children: Snippet;

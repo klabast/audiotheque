@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, type GetStatsPeriodEnum, type PlaysStatsResponse } from '$lib/services/api';
-	import * as m from '$lib/paraglide/messages';
+	import { api, type GetStatsPeriodEnum, type PlaysStatsResponse } from '#lib/services/api';
+	import * as m from '#lib/paraglide/messages';
 
 	const PERIODS: { value: GetStatsPeriodEnum; label: () => string }[] = [
 		{ value: 'week', label: m['stats.period.week'] },

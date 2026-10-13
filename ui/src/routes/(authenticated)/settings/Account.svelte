@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
-	import { api } from '$lib/services/api';
-	import { assessPassword, validatePassword, validatePasswordMatch } from '$lib/utils/validation';
-	import { auth } from '$lib/stores/auth.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { Alert, Button, Input, Label } from '#lib/components/ui';
+	import { api } from '#lib/services/api';
+	import { assessPassword, validatePassword, validatePasswordMatch } from '#lib/utils/validation';
+	import { auth } from '#lib/stores/auth.svelte';
+	import * as m from '#lib/paraglide/messages';
 
 	let currentPassword = $state('');
 	let newPassword = $state('');

@@ -3,15 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import '@testing-library/jest-dom/vitest';
 import PlayFooter from './PlayFooter.svelte';
-import { playback } from '$lib/stores/playback.svelte';
-import { api } from '$lib/services/api';
+import { playback } from '#lib/stores/playback.svelte';
+import { api } from '#lib/services/api';
 
 // Captured clientId listeners so tests can simulate the WS welcome that
 // assigns this tab its hub client ID. "Local audio" depends on a real ID
 // match (no empty-string sentinel).
 const clientIdListeners: Array<(id: string) => void> = [];
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: {
 		lookupTracks: vi.fn().mockResolvedValue([]),
 		playAlbum: vi.fn(),

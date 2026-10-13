@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
-	import { api } from '$lib/services/api';
-	import * as m from '$lib/paraglide/messages';
+	import { Alert, Button, Input, Label } from '#lib/components/ui';
+	import { api } from '#lib/services/api';
+	import * as m from '#lib/paraglide/messages';
 
 	interface Props {
 		isOpen: boolean;

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api } from '$lib/services/api';
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
-	import * as m from '$lib/paraglide/messages';
+	import { api } from '#lib/services/api';
+	import { Alert, Button, Input, Label } from '#lib/components/ui';
+	import * as m from '#lib/paraglide/messages';
 
 	let hostname = $state('');
 	let loading = $state(true);

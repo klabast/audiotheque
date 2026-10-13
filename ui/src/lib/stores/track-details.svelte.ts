@@ -1,7 +1,7 @@
 import { untrack } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { api } from '$lib/services/api';
-import type { LibraryTrackDetailResponse } from '$lib/api/client';
+import { api } from '#lib/services/api';
+import type { LibraryTrackDetailResponse } from '#lib/api/client';
 
 /**
  * Track details by id, for anything that shows a track outside its album page

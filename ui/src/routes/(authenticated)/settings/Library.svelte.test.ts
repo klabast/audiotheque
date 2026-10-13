@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
 import Library from './Library.svelte';
-import type { ScanProgressData, LibraryUpdatedData } from '$lib/services/ws-client';
-import { scan } from '$lib/stores/scan.svelte';
+import type { ScanProgressData, LibraryUpdatedData } from '#lib/services/ws-client';
+import { scan } from '#lib/stores/scan.svelte';
 
 // The scan store imports the api module at top level and subscribes once for
 // the lifetime of the test process. We capture the callbacks it registers so
@@ -14,7 +14,7 @@ const wsCallbacks = vi.hoisted(() => ({
 }));
 
 // Mock the API service
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: {
 		listLibraries: vi.fn(),
 		createLibrary: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('$lib/services/api', () => ({
 }));
 
 // Mock the auth store with an admin user
-vi.mock('$lib/stores/auth.svelte', () => ({
+vi.mock('#lib/stores/auth.svelte', () => ({
 	auth: {
 		get user() {
 			return { username: 'testadmin', isAdmin: true };
@@ -77,7 +77,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should show empty state when no libraries exist', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 
 		render(Library);
@@ -87,7 +87,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should show form when create library button is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 
 		render(Library);
@@ -106,7 +106,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should hide form when cancel button is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 
 		render(Library);
@@ -124,7 +124,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should add new path input when add path button is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 
 		render(Library);
@@ -145,7 +145,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should remove path input when remove button is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 
 		render(Library);
@@ -170,7 +170,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should call createLibrary API when form is submitted', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([]);
 		vi.mocked(api.createLibrary).mockResolvedValue({
 			id: 1,
@@ -201,7 +201,7 @@ describe('Library Settings Component', () => {
 
 	// Library List Item Tests
 	it('should display library list when libraries exist', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibraries = [
 			{
 				id: 1,
@@ -222,7 +222,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should display library name and paths', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibraries = [
 			{
 				id: 1,
@@ -249,7 +249,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should display library statistics', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibraries = [
 			{
 				id: 1,
@@ -273,7 +273,7 @@ describe('Library Settings Component', () => {
 	});
 
 	it('should show edit, delete, and scan buttons', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibraries = [
 			{
 				id: 1,
@@ -307,7 +307,7 @@ describe('Library Scan Progress', () => {
 
 	it('should start scan when Scan button is clicked', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -332,7 +332,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display progress bar when scan is running', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -370,7 +370,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display percentage in progress bar', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -408,7 +408,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display file count (processed/total)', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -447,7 +447,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display current file being processed', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -485,7 +485,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display scan statistics (tracks added, updated, errors)', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -525,7 +525,7 @@ describe('Library Scan Progress', () => {
 
 	it('should hide progress bar when scan completes', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',
@@ -580,7 +580,7 @@ describe('Library Scan Progress', () => {
 
 	it('should display error message when scan fails to start', async () => {
 		// Arrange
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const mockLibrary = {
 			id: 1,
 			name: 'Test Library',

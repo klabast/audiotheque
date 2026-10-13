@@ -1,6 +1,6 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { api } from '$lib/services/api';
-import type { ScanProgressData } from '$lib/services/ws-client';
+import { api } from '#lib/services/api';
+import type { ScanProgressData } from '#lib/services/ws-client';
 
 export interface LibraryUpdatedData {
 	libraryId: number;

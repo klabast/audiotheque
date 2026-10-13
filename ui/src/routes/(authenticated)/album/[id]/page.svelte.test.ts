@@ -7,7 +7,7 @@ vi.mock('$app/state', () => ({
 	page: { params: { id: '42' } }
 }));
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: {
 		getAlbum: vi.fn(),
 		listAlbumTracks: vi.fn(),
@@ -36,7 +36,7 @@ describe('Album page — Play Album button', () => {
 	beforeEach(() => vi.clearAllMocks());
 
 	it('plays the album when the Play Album button is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.getAlbum).mockResolvedValue(album as never);
 		vi.mocked(api.listAlbumTracks).mockResolvedValue(tracks as never);
 		vi.mocked(api.playAlbum).mockResolvedValue({} as never);
@@ -53,7 +53,7 @@ describe('Album page — Play Album button', () => {
 	});
 
 	it('plays the album from a specific track when its row is clicked', async () => {
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.getAlbum).mockResolvedValue(album as never);
 		vi.mocked(api.listAlbumTracks).mockResolvedValue(tracks as never);
 		vi.mocked(api.playAlbum).mockResolvedValue({} as never);

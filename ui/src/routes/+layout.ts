@@ -5,8 +5,8 @@
  * Initializes the session and checks setup status.
  */
 
-import { auth } from '$lib/stores/auth.svelte';
-import { api } from '$lib/services/api';
+import { auth } from '#lib/stores/auth.svelte';
+import { api } from '#lib/services/api';
 
 export const ssr = false;
 

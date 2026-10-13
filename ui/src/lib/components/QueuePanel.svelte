@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { playback } from '$lib/stores/playback.svelte';
-	import { trackDetails } from '$lib/stores/track-details.svelte';
-	import { formatDuration } from '$lib/utils/format';
-	import * as m from '$lib/paraglide/messages';
+	import { playback } from '#lib/stores/playback.svelte';
+	import { trackDetails } from '#lib/stores/track-details.svelte';
+	import { formatDuration } from '#lib/utils/format';
+	import * as m from '#lib/paraglide/messages';
 	import { ChevronDown, ChevronUp, Music, X } from 'lucide-svelte';
 
 	const session = $derived(playback.session);

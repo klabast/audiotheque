@@ -22,7 +22,7 @@ vi.mock('$app/navigation', () => ({
 	beforeNavigate: () => {}
 }));
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: {
 		listLibraries: vi.fn(),
 		listAlbums: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('$lib/services/api', () => ({
 	}
 }));
 
-vi.mock('$lib/stores/playback.svelte', () => ({
+vi.mock('#lib/stores/playback.svelte', () => ({
 	playback: {
 		playAlbum: vi.fn().mockResolvedValue(undefined),
 		currentTrackId: undefined,
@@ -58,7 +58,7 @@ describe('Library page — search filtering', () => {
 		vi.clearAllMocks();
 		goto.mockClear();
 		setUrl('');
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.listLibraries).mockResolvedValue([library] as never);
 		vi.mocked(api.listAlbums).mockResolvedValue(albums as never);
 	});
@@ -135,7 +135,7 @@ describe('Library page — search filtering', () => {
 
 	it('tracks scope debounces a call to the search endpoint and renders results', async () => {
 		vi.useFakeTimers();
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.searchLibrary).mockResolvedValue({
 			albums: [],
 			artists: [],

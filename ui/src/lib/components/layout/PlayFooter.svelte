@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { playback } from '$lib/stores/playback.svelte';
+	import { playback } from '#lib/stores/playback.svelte';
 	import { onMount } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
-	import { AudPlayFooter } from '$lib/components/ui';
-	import { api } from '$lib/services/api';
-	import { trackDetails } from '$lib/stores/track-details.svelte';
+	import * as m from '#lib/paraglide/messages';
+	import { AudPlayFooter } from '#lib/components/ui';
+	import { api } from '#lib/services/api';
+	import { trackDetails } from '#lib/stores/track-details.svelte';
 
 	// === AUDIO ELEMENT ===
 	// Mounts/unmounts with the {#if !isRemote} guard, so it's reactive.

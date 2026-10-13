@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Search, X } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
+	import * as m from '#lib/paraglide/messages';
 
 	// The library page (`/`) owns `?q=`/`?scope=` and filters live. Everywhere
 	// else this box just holds the in-progress text until the first keystroke

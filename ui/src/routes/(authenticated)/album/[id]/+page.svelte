@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { api, type LibraryAlbumResponse, type LibraryTrackResponse } from '$lib/services/api';
-	import { playback } from '$lib/stores/playback.svelte';
-	import { Button } from '$lib/components/ui';
-	import { formatDuration } from '$lib/utils/format';
+	import { api, type LibraryAlbumResponse, type LibraryTrackResponse } from '#lib/services/api';
+	import { playback } from '#lib/stores/playback.svelte';
+	import { Button } from '#lib/components/ui';
+	import { formatDuration } from '#lib/utils/format';
 	import { ArrowLeft, ListEnd, ListStart, Pause, Play } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
+	import * as m from '#lib/paraglide/messages';
 
 	let album = $state<LibraryAlbumResponse | null>(null);
 	let tracks = $state<LibraryTrackResponse[]>([]);

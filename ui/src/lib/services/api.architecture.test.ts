@@ -109,7 +109,7 @@ describe('API Service Architecture', () => {
 				console.error(`    ${v.code}\n`);
 			});
 			console.error('💡 Fix: Use the API service instead of fetch()');
-			console.error('    import { api } from "$lib/services/api";');
+			console.error('    import { api } from "#lib/services/api";');
 			console.error('    Then use: api.methodName()');
 			console.error('\n📊 Total violations:', violations.length);
 		}
@@ -234,12 +234,12 @@ describe('API Service Architecture', () => {
 				reason: 'Direct import from WebSocket client'
 			},
 			{
-				pattern: /from\s+['"]\$lib\/api\/generated\//,
-				reason: 'Direct import from generated API client ($lib alias)'
+				pattern: /from\s+['"]#lib\/api\/generated\//,
+				reason: 'Direct import from generated API client (#lib alias)'
 			},
 			{
-				pattern: /from\s+['"]\$lib\/services\/ws-client['"]/,
-				reason: 'Direct import from WebSocket client ($lib alias)'
+				pattern: /from\s+['"]#lib\/services\/ws-client['"]/,
+				reason: 'Direct import from WebSocket client (#lib alias)'
 			}
 		];
 
@@ -330,9 +330,9 @@ describe('API Service Architecture', () => {
 				console.error(`    Reason: ${v.reason}\n`);
 			});
 			console.error('💡 Fix: Use the unified API service instead');
-			console.error('    ❌ BAD:  import { LibraryApi } from "$lib/api/generated/..."');
-			console.error('    ❌ BAD:  import { WebSocketClient } from "$lib/services/ws-client"');
-			console.error('    ✅ GOOD: import { api } from "$lib/services/api";');
+			console.error('    ❌ BAD:  import { LibraryApi } from "#lib/api/generated/..."');
+			console.error('    ❌ BAD:  import { WebSocketClient } from "#lib/services/ws-client"');
+			console.error('    ✅ GOOD: import { api } from "#lib/services/api";');
 			console.error('             await api.createLibrary(...)');
 			console.error('             api.subscribeToScanProgress(libraryId, callback)');
 			console.error('\n📊 Total violations:', violations.length);
