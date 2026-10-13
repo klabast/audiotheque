@@ -264,6 +264,7 @@ When('User refreshes the page', async function (this: AudiodWorld) {
 When('User sets primary sort to {string}', async function (this: AudiodWorld, field: string) {
 	const page = this.getPage();
 	await page.locator('[data-testid="sort-primary-field"]').selectOption(field);
+	await expect(page).toHaveURL(new RegExp(`[?&]sort=${field}`));
 });
 
 When('User sets secondary sort to {string}', async function (this: AudiodWorld, field: string) {
