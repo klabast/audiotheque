@@ -123,7 +123,7 @@
 >
 	<div class="overflow-hidden">
 		<!-- Mobile: tappable card. Desktop: full-width bar -->
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div
 			class="sm:p-3 sm:cursor-default bg-surface-alt mx-2 mb-1 rounded-xl shadow-lg cursor-pointer sm:bg-transparent sm:mx-0 sm:mb-0 sm:rounded-none sm:shadow-none"
 			onclick={(e) => {
