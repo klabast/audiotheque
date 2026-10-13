@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { auth } from '$lib/stores/auth.svelte';
+	import { auth } from '#lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import AppLayout from '$lib/components/layout/AppLayout.svelte';
+	import AppLayout from '#lib/components/layout/AppLayout.svelte';
 
 	interface Props {
 		children: Snippet;

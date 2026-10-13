@@ -1,9 +1,9 @@
 <script lang="ts">
 	import UserMenu from './UserMenu.svelte';
 	import { Menu, Home, ListMusic, Loader2 } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
-	import { AudSearchBox } from '$lib/components/ui';
-	import { scan } from '$lib/stores/scan.svelte';
+	import * as m from '#lib/paraglide/messages';
+	import { AudSearchBox } from '#lib/components/ui';
+	import { scan } from '#lib/stores/scan.svelte';
 
 	interface Props {
 		toggleLeftDrawer: () => void;

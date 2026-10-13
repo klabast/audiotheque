@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
 import Page from './+page.svelte';
-import { api } from '$lib/services/api';
+import { api } from '#lib/services/api';
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: { getStats: vi.fn() }
 }));
 

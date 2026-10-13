@@ -3,7 +3,7 @@ import { render, fireEvent, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import '@testing-library/jest-dom/vitest';
 import AudDeviceSelector from './AudDeviceSelector.svelte';
-import type { DeviceInfo } from '$lib/services/api';
+import type { DeviceInfo } from '#lib/services/api';
 
 describe('AudDeviceSelector — multi-browser labelling', () => {
 	it('renders "This Device" for the current browser and the real name for other browsers', async () => {

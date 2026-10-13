@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Tabs, Alert, type TabItem } from '$lib/components/ui';
-	import { auth } from '$lib/stores/auth.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { Tabs, Alert, type TabItem } from '#lib/components/ui';
+	import { auth } from '#lib/stores/auth.svelte';
+	import * as m from '#lib/paraglide/messages';
 	import Account from '../Account.svelte';
 	import General from '../General.svelte';
 	import Library from '../Library.svelte';
@@ -34,11 +34,11 @@
 			.map(({ label, value }) => ({ label, value }))
 	);
 
-	let currentCategory = $derived($page.params.category ?? '');
+	let currentCategory = $derived(page.params.category ?? '');
 	let isBlocked = $derived(!isAdmin && ADMIN_ONLY.has(currentCategory));
 
 	function handleTabChange(newValue: string) {
-		goto(resolve(`/settings/${newValue}`)).then(() => {});
+		goto(resolve('/(authenticated)/settings/[category]', { category: newValue })).then(() => {});
 	}
 </script>
 

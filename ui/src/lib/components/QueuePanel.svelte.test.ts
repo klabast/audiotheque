@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import '@testing-library/jest-dom/vitest';
 import QueuePanel from './QueuePanel.svelte';
-import { playback } from '$lib/stores/playback.svelte';
-import { api } from '$lib/services/api';
+import { playback } from '#lib/stores/playback.svelte';
+import { api } from '#lib/services/api';
 
 const tracks: Record<number, object> = {
 	1: { id: 1, title: 'Now', artistName: 'A', albumId: 100, albumTitle: 'Source Album' },
@@ -12,7 +12,7 @@ const tracks: Record<number, object> = {
 	8: { id: 8, title: 'Queued Two', artistName: 'B', albumId: 3, albumTitle: 'Other Album' }
 };
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: {
 		lookupTracks: vi.fn(),
 		removeFromQueue: vi.fn(),

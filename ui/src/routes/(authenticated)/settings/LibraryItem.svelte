@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Button, DropdownButton } from '$lib/components/ui';
+	import { Button, DropdownButton } from '#lib/components/ui';
 	import { Pencil, RefreshCw, RotateCcw, Trash2 } from 'lucide-svelte';
-	import type { LibraryLibraryResponse } from '$lib/api/generated/src';
-	import type { ScanProgressData } from '$lib/services/ws-client';
+	import type { LibraryLibraryResponse } from '#lib/api/generated/src';
+	import type { ScanProgressData } from '#lib/services/ws-client';
 	import LibraryScanStatus from './LibraryScanStatus.svelte';
 
 	interface LibraryWithStats extends LibraryLibraryResponse {

@@ -9,14 +9,14 @@ import {
 	systemApi,
 	tracksApi,
 	usersApi
-} from '$lib/api/client';
+} from '#lib/api/client';
 import type {
 	GetStatsPeriodEnum,
 	PlaybackAddToQueueRequestPositionEnum,
 	PlaybackSessionResponse,
 	SettingsDevice as GeneratedSettingsDevice
-} from '$lib/api/client';
-import { ResponseError, type InitOverrideFunction } from '$lib/api/generated/src/runtime';
+} from '#lib/api/client';
+import { ResponseError, type InitOverrideFunction } from '#lib/api/generated/src/runtime';
 import { throwIfNotOk } from './api-error';
 import {
 	createWebSocketClient,
@@ -25,7 +25,7 @@ import {
 	type LibraryUpdatedData
 } from './ws-client';
 
-export * from '$lib/api/client';
+export * from '#lib/api/client';
 
 export type ScanProgressCallback = (progress: ScanProgressData) => void;
 export type LibraryUpdatedCallback = (data: LibraryUpdatedData) => void;

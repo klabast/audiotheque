@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { AuthService } from '$lib/services/authService';
+	import { AuthService } from '#lib/services/authService';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { api } from '$lib/services/api';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { api } from '#lib/services/api';
 	import { onMount } from 'svelte';
-	import { APP_NAME } from '$lib/branding';
-	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '$lib/components/ui';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { assessPassword, validatePassword, validatePasswordMatch } from '$lib/utils/validation';
-	import * as m from '$lib/paraglide/messages';
+	import { APP_NAME } from '#lib/branding';
+	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '#lib/components/ui';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import { assessPassword, validatePassword, validatePasswordMatch } from '#lib/utils/validation';
+	import * as m from '#lib/paraglide/messages';
 
 	const authService = new AuthService();
 

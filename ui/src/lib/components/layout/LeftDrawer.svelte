@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth.svelte';
-	import { APP_NAME } from '$lib/branding';
-	import { Avatar } from '$lib/components/ui';
-	import { routes } from '$lib/utils/navigation';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { APP_NAME } from '#lib/branding';
+	import { Avatar } from '#lib/components/ui';
+	import { routes } from '#lib/utils/navigation';
 	import { ChartNoAxesColumn, Home, Settings, LogOut, X } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
+	import * as m from '#lib/paraglide/messages';
 
 	interface Props {
 		isLeftDrawerOpen: boolean;

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
-	import type { LibraryLibraryResponse } from '$lib/api/generated/src';
+	import * as m from '#lib/paraglide/messages';
+	import { Alert, Button, Input, Label } from '#lib/components/ui';
+	import type { LibraryLibraryResponse } from '#lib/api/generated/src';
 	import LibraryPathsEditor from './LibraryPathsEditor.svelte';
 
 	interface Props {

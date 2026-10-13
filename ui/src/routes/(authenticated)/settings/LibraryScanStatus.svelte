@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Alert } from '$lib/components/ui';
-	import type { ScanProgressData } from '$lib/services/ws-client';
+	import { Alert } from '#lib/components/ui';
+	import type { ScanProgressData } from '#lib/services/ws-client';
 
 	interface Props {
 		libraryId: number;

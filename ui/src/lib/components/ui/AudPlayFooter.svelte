@@ -3,7 +3,7 @@
 	import AudVolumeSlider from './AudVolumeSlider.svelte';
 	import AudDeviceSelector from './AudDeviceSelector.svelte';
 	import AudHomeIndicator from './AudHomeIndicator.svelte';
-	import type { DeviceInfo } from '$lib/services/api';
+	import type { DeviceInfo } from '#lib/services/api';
 
 	interface Props {
 		// Track info

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { DropdownMenu } from 'bits-ui';
-	import type { DeviceInfo } from '$lib/services/api';
+	import type { DeviceInfo } from '#lib/services/api';
 
 	interface Props {
 		deviceName: string;

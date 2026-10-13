@@ -7,8 +7,8 @@
  * NOTE: Don't use this directly - use the auth store instead (lib/stores/auth.ts)
  */
 
-import { api } from '$lib/services/api';
-import type { AuthUserResponse } from '$lib/api/generated/src';
+import { api } from '#lib/services/api';
+import type { AuthUserResponse } from '#lib/api/generated/src';
 
 export interface AuthError {
 	message: string;

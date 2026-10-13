@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { AuthService } from '$lib/services/authService';
+	import { AuthService } from '#lib/services/authService';
 	import { goto } from '$app/navigation';
-	import { APP_NAME } from '$lib/branding';
-	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '$lib/components/ui';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { APP_NAME } from '#lib/branding';
+	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '#lib/components/ui';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import {
 		validatePassword,
 		validatePasswordMatch,
 		PASSWORD_MIN_LENGTH,
 		PASSWORD_MAX_LENGTH,
 		RESET_CODE_LENGTH
-	} from '$lib/utils/validation';
-	import * as m from '$lib/paraglide/messages';
+	} from '#lib/utils/validation';
+	import * as m from '#lib/paraglide/messages';
 
 	const authService = new AuthService();
 

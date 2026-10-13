@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth.svelte';
-	import { Avatar, Dropdown, type DropdownItem } from '$lib/components/ui';
-	import { routes } from '$lib/utils/navigation';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { Avatar, Dropdown, type DropdownItem } from '#lib/components/ui';
+	import { routes } from '#lib/utils/navigation';
 	import { LogOut, Settings } from 'lucide-svelte';
 
 	function handleLogout() {

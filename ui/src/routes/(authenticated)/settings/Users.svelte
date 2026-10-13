@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api } from '$lib/services/api';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { Alert, Button, ConfirmDeleteModal, Input, Label } from '$lib/components/ui';
+	import { api } from '#lib/services/api';
+	import { auth } from '#lib/stores/auth.svelte';
+	import { Alert, Button, ConfirmDeleteModal, Input, Label } from '#lib/components/ui';
 	import { Trash2, KeyRound } from 'lucide-svelte';
-	import * as m from '$lib/paraglide/messages';
-	import { APP_NAME } from '$lib/branding';
+	import * as m from '#lib/paraglide/messages';
+	import { APP_NAME } from '#lib/branding';
 
 	type UserRow = { id: number; username: string; is_admin: boolean };
 

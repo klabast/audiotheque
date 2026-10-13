@@ -21,7 +21,7 @@ function setupApiMock() {
 	const sessionListeners: WsCb[] = [];
 	const clientIdListeners: WsCb[] = [];
 
-	vi.doMock('$lib/services/api', () => ({
+	vi.doMock('#lib/services/api', () => ({
 		api: {
 			subscribeToPlaybackSession: vi.fn((cb: WsCb) => {
 				sessionListeners.push(cb);
@@ -103,7 +103,7 @@ describe('playback store — backend-authoritative (dumb client)', () => {
 		playback.setAudioElement(audio);
 		await playback.loadSession();
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.resumePlayback).mockResolvedValue({
 			state: 'playing',
 			deviceId: '',
@@ -127,7 +127,7 @@ describe('playback store — backend-authoritative (dumb client)', () => {
 		playback.setAudioElement(audio);
 		await playback.loadSession();
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.pausePlayback).mockResolvedValue({
 			state: 'paused',
 			deviceId: '',
@@ -151,7 +151,7 @@ describe('playback store — backend-authoritative (dumb client)', () => {
 		await playback.loadSession();
 
 		// Make the audio element believe it's local (currentTime defaults to 0).
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.seekPlayback).mockResolvedValue({
 			state: 'playing',
 			deviceId: '',
@@ -176,7 +176,7 @@ describe('playback store — backend-authoritative (dumb client)', () => {
 		playback.setAudioElement(audio);
 		await playback.loadSession();
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.setPlaybackVolume).mockResolvedValue({
 			state: 'playing',
 			deviceId: '',
@@ -213,7 +213,7 @@ describe('playback store — backend-authoritative (dumb client)', () => {
 			source: { type: 'album', id: 100, remaining: [] }
 		});
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.resumePlayback).mockResolvedValue({
 			state: 'playing',
 			deviceId: '',
@@ -285,7 +285,7 @@ describe('playback store — onTrackEnded error handling', () => {
 		const { playback } = await import('./playback.svelte');
 		await playback.loadSession();
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.nextTrack).mockRejectedValue(new Error('no active session'));
 		vi.mocked(api.getPlaybackSession).mockResolvedValue({
 			state: 'stopped',
@@ -307,7 +307,7 @@ describe('playback store — onTrackEnded error handling', () => {
 		const { playback } = await import('./playback.svelte');
 		await playback.loadSession();
 
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		vi.mocked(api.nextTrack).mockResolvedValue({
 			state: 'playing',
 			deviceId: '',
@@ -381,7 +381,7 @@ describe('playback store — queue commands', () => {
 		['playNext', { albumId: 3 }, 'next']
 	])('%s %o queues at %s and mirrors the session', async (command, what, position) => {
 		setupApiMock();
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const { playback } = await import('./playback.svelte');
 
 		await playback[command](what);
@@ -397,7 +397,7 @@ describe('playback store — queue commands', () => {
 		['clearQueue', [], 'clearQueue']
 	] as const)('%s goes to the server and mirrors the session', async (command, args, apiMethod) => {
 		setupApiMock();
-		const { api } = await import('$lib/services/api');
+		const { api } = await import('#lib/services/api');
 		const { playback } = await import('./playback.svelte');
 
 		await (playback[command] as (...a: unknown[]) => Promise<void>)(...args);

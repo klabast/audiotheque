@@ -1,7 +1,9 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import UnoCSS from 'unocss/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
+import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => {
@@ -10,8 +12,16 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [
-			UnoCSS(),
-			sveltekit(),
+			// SvelteKit never runs transformIndexHtml; styles load via `virtual:uno.css`
+			...UnoCSS().map(({ transformIndexHtml: _, ...plugin }) => plugin),
+			sveltekit({
+				preprocess: vitePreprocess(),
+				adapter: adapter({ fallback: 'index.html' }),
+				prerender: {
+					handleHttpError: 'ignore',
+					handleMissingId: 'ignore'
+				}
+			}),
 			paraglideVitePlugin({
 				project: './project.inlang',
 				outdir: './src/lib/paraglide'

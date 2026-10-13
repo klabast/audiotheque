@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
+	import * as m from '#lib/paraglide/messages';
+	import { Alert, Button, Input, Label } from '#lib/components/ui';
 	import LibraryPathsEditor from './LibraryPathsEditor.svelte';
 
 	interface Props {

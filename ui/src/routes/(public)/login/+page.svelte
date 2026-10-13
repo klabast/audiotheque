@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth.svelte';
+	import { auth } from '#lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
-	import { APP_NAME } from '$lib/branding';
-	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '$lib/components/ui';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { APP_NAME } from '#lib/branding';
+	import { AudAuthLayout, Alert, Button, Card, Input, Label } from '#lib/components/ui';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import * as m from '#lib/paraglide/messages';
 
 	let username = $state('');
 	let password = $state('');

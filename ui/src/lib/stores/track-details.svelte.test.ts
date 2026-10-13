@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '$lib/services/api';
+import { api } from '#lib/services/api';
 import { createTrackDetails } from './track-details.svelte';
 
-vi.mock('$lib/services/api', () => ({
+vi.mock('#lib/services/api', () => ({
 	api: { lookupTracks: vi.fn() }
 }));
 
